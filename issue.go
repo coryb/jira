@@ -2,20 +2,19 @@ package jira
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
-	"net/url"
 	"strings"
 
-	"github.com/coryb/oreo"
-
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
 type IssueQueryProvider interface {
 	ProvideIssueQueryString() string
+	ProvideFields() []string
+	ProvideExpand() []string
 }
 
 type IssueOptions struct {
@@ -25,6 +24,9 @@ type IssueOptions struct {
 	FieldsByKeys  bool     `json:"fieldsByKeys,omitempty" yaml:"fieldsByKeys,omitempty"`
 	UpdateHistory bool     `json:"updateHistory,omitempty" yaml:"updateHistory,omitempty"`
 }
+
+func (o *IssueOptions) ProvideFields() []string { return o.Fields }
+func (o *IssueOptions) ProvideExpand() []string { return o.Expand }
 
 func (o *IssueOptions) ProvideIssueQueryString() string {
 	params := []string{}
@@ -50,251 +52,214 @@ func (o *IssueOptions) ProvideIssueQueryString() string {
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getIssue
-func (j *Jira) GetIssue(issue string, iqg IssueQueryProvider) (*jiradata.Issue, error) {
+func (j *Jira) GetIssue(issue string, iqg IssueQueryProvider) (*Issue, error) {
 	return GetIssue(j.UA, j.Endpoint, issue, iqg)
 }
 
-func GetIssue(ua HttpClient, endpoint string, issue string, iqg IssueQueryProvider) (*jiradata.Issue, error) {
-	query := ""
-	if iqg != nil {
-		query = iqg.ProvideIssueQueryString()
-	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue)
-	uri += query
-	resp, err := ua.GetJSON(uri)
+func GetIssue(ua HttpClient, endpoint string, issue string, iqg IssueQueryProvider) (*Issue, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := &jiradata.Issue{}
-		return results, json.NewDecoder(resp.Body).Decode(results)
+	var fields, expand []string
+	if iqg != nil {
+		fields = iqg.ProvideFields()
+		expand = iqg.ProvideExpand()
 	}
-	return nil, responseError(resp)
+	typed, resp, err := client.Issue.Get(context.Background(), issue, fields, expand)
+	if err != nil {
+		return nil, err
+	}
+	result := &Issue{IssueSchemeV2: typed}
+	var raw struct {
+		Fields map[string]interface{} `json:"fields"`
+	}
+	if jsonErr := json.Unmarshal(resp.Bytes.Bytes(), &raw); jsonErr == nil {
+		result.Fields = raw.Fields
+	}
+	return result, nil
 }
 
-func (j *Jira) GetIssueWorklog(issue string) (*jiradata.Worklogs, error) {
+func (j *Jira) GetIssueWorklog(issue string) (*[]*models.IssueWorklogRichTextScheme, error) {
 	return GetIssueWorklog(j.UA, j.Endpoint, issue)
 }
 
-// https://docs.atlassian.com/jira/REST/cloud/#api/2/issue/{issueIdOrKey}/worklog-getIssueWorklog
-func GetIssueWorklog(ua HttpClient, endpoint string, issue string) (*jiradata.Worklogs, error) {
-	startAt := 0
-	total := 1
-	maxResults := 100
-	worklogs := jiradata.Worklogs{}
-	for startAt < total {
-		uri := URLJoin(endpoint, "rest/api/2/issue", issue, "worklog")
-		uri += fmt.Sprintf("?startAt=%d&maxResults=%d", startAt, maxResults)
-		resp, err := ua.GetJSON(uri)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == 200 {
-			results := &jiradata.WorklogWithPagination{}
-			err := json.NewDecoder(resp.Body).Decode(results)
-			if err != nil {
-				return nil, err
-			}
-			startAt = startAt + maxResults
-			total = results.Total
-			worklogs = append(worklogs, results.Worklogs...)
-		} else {
-			return nil, responseError(resp)
-		}
+func GetIssueWorklog(ua HttpClient, endpoint string, issue string) (*[]*models.IssueWorklogRichTextScheme, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
+	if err != nil {
+		return nil, err
 	}
-	return &worklogs, nil
+	page, _, err := client.Issue.Worklog.Issue(context.Background(), issue, 0, 0, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &page.Worklogs, nil
 }
 
-func (j *Jira) GetIssueComment(issue string) (*jiradata.Comments, error) {
+func (j *Jira) GetIssueComment(issue string) ([]*models.IssueCommentSchemeV2, error) {
 	return GetIssueComment(j.UA, j.Endpoint, issue)
 }
 
 // https://docs.atlassian.com/software/jira/docs/api/REST/7.12.0/#api/2/issue-getComments
-func GetIssueComment(ua HttpClient, endpoint string, issue string) (*jiradata.Comments, error) {
+func GetIssueComment(ua HttpClient, endpoint string, issue string) ([]*models.IssueCommentSchemeV2, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
+	if err != nil {
+		return nil, err
+	}
 	startAt := 0
 	total := 1
 	maxResults := 100
-	comments := jiradata.Comments{}
+	var comments []*models.IssueCommentSchemeV2
 	for startAt < total {
-		uri := URLJoin(endpoint, "rest/api/2/issue", issue, "comment")
-		uri += fmt.Sprintf("?startAt=%d&maxResults=%d", startAt, maxResults)
-		resp, err := ua.GetJSON(uri)
+		page, _, err := client.Issue.Comment.Gets(context.Background(), issue, "", nil, startAt, maxResults)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == 200 {
-			results := &jiradata.CommentsWithPagination{}
-			err := json.NewDecoder(resp.Body).Decode(results)
-			if err != nil {
-				return nil, err
-			}
-			startAt = startAt + maxResults
-			total = results.Total
-			comments = append(comments, results.Comments...)
-		} else {
-			return nil, responseError(resp)
-		}
+		total = page.Total
+		comments = append(comments, page.Comments...)
+		startAt += maxResults
 	}
-	return &comments, nil
-}
-
-type WorklogProvider interface {
-	ProvideWorklog() *jiradata.Worklog
+	return comments, nil
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue/{issueIdOrKey}/worklog-addWorklog
-func (j *Jira) AddIssueWorklog(issue string, wp WorklogProvider) (*jiradata.Worklog, error) {
-	return AddIssueWorklog(j.UA, j.Endpoint, issue, wp)
+func (j *Jira) AddIssueWorklog(issue string, req *models.IssueWorklogRichTextScheme) (*models.IssueWorklogRichTextScheme, error) {
+	return AddIssueWorklog(j.UA, j.Endpoint, issue, req)
 }
 
-func AddIssueWorklog(ua HttpClient, endpoint string, issue string, wp WorklogProvider) (*jiradata.Worklog, error) {
-	req := wp.ProvideWorklog()
-	encoded, err := json.Marshal(req)
+func AddIssueWorklog(ua HttpClient, endpoint string, issue string, req *models.IssueWorklogRichTextScheme) (*models.IssueWorklogRichTextScheme, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "worklog")
-	resp, err := ua.Post(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return nil, err
+	payload := &models.WorklogRichTextPayloadScheme{
+		Started:          req.Started,
+		TimeSpent:        req.TimeSpent,
+		TimeSpentSeconds: req.TimeSpentSeconds,
+		Visibility:       req.Visibility,
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 201 {
-		results := &jiradata.Worklog{}
-		return results, json.NewDecoder(resp.Body).Decode(results)
+	if req.Comment != "" {
+		payload.Comment = &models.CommentPayloadSchemeV2{Body: req.Comment}
 	}
-	return nil, responseError(resp)
+	result, _, err := client.Issue.Worklog.Add(context.Background(), issue, payload, nil)
+	return result, err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getEditIssueMeta
-func (j *Jira) GetIssueEditMeta(issue string) (*jiradata.EditMeta, error) {
+func (j *Jira) GetIssueEditMeta(issue string) (*EditMeta, error) {
 	return GetIssueEditMeta(j.UA, j.Endpoint, issue)
 }
 
-func GetIssueEditMeta(ua HttpClient, endpoint string, issue string) (*jiradata.EditMeta, error) {
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "editmeta")
-	resp, err := ua.GetJSON(uri)
+func GetIssueEditMeta(ua HttpClient, endpoint string, issue string) (*EditMeta, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := &jiradata.EditMeta{}
-		return results, json.NewDecoder(resp.Body).Decode(results)
+	_, resp, err := client.Issue.Metadata.Get(context.Background(), issue, false, false)
+	if err != nil {
+		return nil, err
 	}
-	return nil, responseError(resp)
-}
-
-type IssueUpdateProvider interface {
-	ProvideIssueUpdate() *jiradata.IssueUpdate
+	results := &EditMeta{}
+	return results, json.Unmarshal(resp.Bytes.Bytes(), results)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-editIssue
-func (j *Jira) EditIssue(issue string, iup IssueUpdateProvider) error {
-	return EditIssue(j.UA, j.Endpoint, issue, iup)
+func (j *Jira) EditIssue(issue string, req *IssueUpdate) error {
+	return EditIssue(j.UA, j.Endpoint, issue, req)
 }
 
-func EditIssue(ua HttpClient, endpoint string, issue string, iup IssueUpdateProvider) error {
-	req := iup.ProvideIssueUpdate()
+func EditIssue(ua HttpClient, endpoint string, issue string, req *IssueUpdate) error {
+	client, err := newAtlassianClientV2(ua, endpoint)
+	if err != nil {
+		return err
+	}
 	encoded, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue)
-	resp, err := ua.Put(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
+	var bodyMap map[string]interface{}
+	if err := json.Unmarshal(encoded, &bodyMap); err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
+	cf := &models.CustomFields{Fields: []map[string]interface{}{bodyMap}}
+	_, err = client.Issue.Update(context.Background(), issue, false, &models.IssueSchemeV2{}, cf, nil)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-createIssue
-func (j *Jira) CreateIssue(iup IssueUpdateProvider) (*jiradata.IssueCreateResponse, error) {
-	return CreateIssue(j.UA, j.Endpoint, iup)
+func (j *Jira) CreateIssue(req *IssueUpdate) (*models.IssueResponseScheme, error) {
+	return CreateIssue(j.UA, j.Endpoint, req)
 }
 
-func CreateIssue(ua HttpClient, endpoint string, iup IssueUpdateProvider) (*jiradata.IssueCreateResponse, error) {
-	req := iup.ProvideIssueUpdate()
+func CreateIssue(ua HttpClient, endpoint string, req *IssueUpdate) (*models.IssueResponseScheme, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
+	if err != nil {
+		return nil, err
+	}
 	encoded, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue")
-	resp, err := ua.Post(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
+	var bodyMap map[string]interface{}
+	if err := json.Unmarshal(encoded, &bodyMap); err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 201 {
-		results := &jiradata.IssueCreateResponse{}
-		return results, json.NewDecoder(resp.Body).Decode(results)
-	}
-	return nil, responseError(resp)
+	cf := &models.CustomFields{Fields: []map[string]interface{}{bodyMap}}
+	result, _, err := client.Issue.Create(context.Background(), &models.IssueSchemeV2{}, cf)
+	return result, err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getCreateIssueMeta
-func (j *Jira) GetIssueCreateMetaProject(projectKey string) (*jiradata.CreateMetaProject, error) {
+func (j *Jira) GetIssueCreateMetaProject(projectKey string) (*CreateMetaProject, error) {
 	return GetIssueCreateMetaProject(j.UA, j.Endpoint, projectKey)
 }
 
-func GetIssueCreateMetaProject(ua HttpClient, endpoint string, projectKey string) (*jiradata.CreateMetaProject, error) {
-	uri := URLJoin(endpoint, "rest/api/2/issue/createmeta")
-	uri += fmt.Sprintf("?projectKeys=%s&expand=projects.issuetypes.fields", projectKey)
-	resp, err := ua.GetJSON(uri)
+func GetIssueCreateMetaProject(ua HttpClient, endpoint string, projectKey string) (*CreateMetaProject, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := &jiradata.CreateMeta{}
-		err = json.NewDecoder(resp.Body).Decode(results)
-		if err != nil {
-			return nil, err
-		}
-		for _, project := range results.Projects {
-			if project.Key == projectKey {
-				return project, nil
-			}
-		}
-		return nil, fmt.Errorf("project %s not found", projectKey)
+	opts := &models.IssueMetadataCreateOptions{
+		ProjectKeys: []string{projectKey},
+		Expand:      "projects.issuetypes.fields",
 	}
-	return nil, responseError(resp)
+	_, resp, err := client.Issue.Metadata.Create(context.Background(), opts)
+	if err != nil {
+		return nil, err
+	}
+	results := &CreateMeta{}
+	if err := json.Unmarshal(resp.Bytes.Bytes(), results); err != nil {
+		return nil, err
+	}
+	for _, project := range results.Projects {
+		if project.Key == projectKey {
+			return project, nil
+		}
+	}
+	return nil, fmt.Errorf("project %s not found", projectKey)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getCreateIssueMeta
-func (j *Jira) GetIssueCreateMetaIssueType(projectKey, issueTypeName string) (*jiradata.IssueType, error) {
+func (j *Jira) GetIssueCreateMetaIssueType(projectKey, issueTypeName string) (*IssueType, error) {
 	return GetIssueCreateMetaIssueType(j.UA, j.Endpoint, projectKey, issueTypeName)
 }
 
-func GetIssueCreateMetaIssueType(ua HttpClient, endpoint string, projectKey, issueTypeName string) (*jiradata.IssueType, error) {
-	uri := URLJoin(endpoint, "rest/api/2/issue/createmeta")
-	uri += fmt.Sprintf("?projectKeys=%s&issuetypeNames=%s&expand=projects.issuetypes.fields", projectKey, url.QueryEscape(issueTypeName))
-	resp, err := ua.GetJSON(uri)
+func GetIssueCreateMetaIssueType(ua HttpClient, endpoint string, projectKey, issueTypeName string) (*IssueType, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, responseError(resp)
+	opts := &models.IssueMetadataCreateOptions{
+		ProjectKeys:    []string{projectKey},
+		IssueTypeNames: []string{issueTypeName},
+		Expand:         "projects.issuetypes.fields",
 	}
-	results := &jiradata.CreateMeta{}
-	if err := json.NewDecoder(resp.Body).Decode(results); err != nil {
+	_, resp, err := client.Issue.Metadata.Create(context.Background(), opts)
+	if err != nil {
+		return nil, err
+	}
+	results := &CreateMeta{}
+	if err := json.Unmarshal(resp.Bytes.Bytes(), results); err != nil {
 		return nil, err
 	}
 	for _, project := range results.Projects {
@@ -310,40 +275,36 @@ func GetIssueCreateMetaIssueType(ua HttpClient, endpoint string, projectKey, iss
 	return nil, fmt.Errorf("project %s and IssueType %s not found", projectKey, issueTypeName)
 }
 
-type LinkIssueProvider interface {
-	ProvideLinkIssueRequest() *jiradata.LinkIssueRequest
-}
-
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issueLink-linkIssues
-func (j *Jira) LinkIssues(lip LinkIssueProvider) error {
-	return LinkIssues(j.UA, j.Endpoint, lip)
+func (j *Jira) LinkIssues(req *LinkIssueRequest) error {
+	return LinkIssues(j.UA, j.Endpoint, req)
 }
 
-func LinkIssues(ua HttpClient, endpoint string, lip LinkIssueProvider) error {
-	req := lip.ProvideLinkIssueRequest()
-	encoded, err := json.Marshal(req)
+func LinkIssues(ua HttpClient, endpoint string, req *LinkIssueRequest) error {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issueLink")
-	resp, err := ua.Post(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return err
+	payload := &models.LinkPayloadSchemeV2{Type: req.Type}
+	if req.InwardIssue != nil {
+		payload.InwardIssue = &models.LinkedIssueScheme{ID: req.InwardIssue.ID, Key: req.InwardIssue.Key}
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 201 {
-		return nil
+	if req.OutwardIssue != nil {
+		payload.OutwardIssue = &models.LinkedIssueScheme{ID: req.OutwardIssue.ID, Key: req.OutwardIssue.Key}
 	}
-	return responseError(resp)
+	if req.Comment != nil {
+		payload.Comment = &models.CommentPayloadSchemeV2{Body: req.Comment.Body, Visibility: req.Comment.Visibility}
+	}
+	_, err = client.Issue.Link.Create(context.Background(), payload)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getTransitions
-func (j *Jira) GetIssueTransitions(issue string) (*jiradata.TransitionsMeta, error) {
+func (j *Jira) GetIssueTransitions(issue string) (*TransitionsMeta, error) {
 	return GetIssueTransitions(j.UA, j.Endpoint, issue)
 }
 
-func GetIssueTransitions(ua HttpClient, endpoint string, issue string) (*jiradata.TransitionsMeta, error) {
+func GetIssueTransitions(ua HttpClient, endpoint string, issue string) (*TransitionsMeta, error) {
 	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "transitions")
 	uri += "?expand=transitions.fields"
 	resp, err := ua.GetJSON(uri)
@@ -353,58 +314,59 @@ func GetIssueTransitions(ua HttpClient, endpoint string, issue string) (*jiradat
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		results := &jiradata.TransitionsMeta{}
+		results := &TransitionsMeta{}
 		return results, json.NewDecoder(resp.Body).Decode(results)
 	}
 	return nil, responseError(resp)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-doTransition
-func (j *Jira) TransitionIssue(issue string, iup IssueUpdateProvider) error {
-	return TransitionIssue(j.UA, j.Endpoint, issue, iup)
+func (j *Jira) TransitionIssue(issue string, req *IssueUpdate) error {
+	return TransitionIssue(j.UA, j.Endpoint, issue, req)
 }
 
-func TransitionIssue(ua HttpClient, endpoint string, issue string, iup IssueUpdateProvider) error {
-	req := iup.ProvideIssueUpdate()
-	encoded, err := json.Marshal(req)
+func TransitionIssue(ua HttpClient, endpoint string, issue string, req *IssueUpdate) error {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "transitions")
-	resp, err := ua.Post(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return err
+	transitionID := ""
+	if req.Transition != nil {
+		transitionID = req.Transition.ID
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
+	var options *models.IssueMoveOptionsV2
+	if req.Fields != nil || req.Update != nil {
+		bodyMap := map[string]interface{}{}
+		if req.Fields != nil {
+			bodyMap["fields"] = req.Fields
+		}
+		if req.Update != nil {
+			bodyMap["update"] = req.Update
+		}
+		options = &models.IssueMoveOptionsV2{
+			Fields:       &models.IssueSchemeV2{},
+			CustomFields: &models.CustomFields{Fields: []map[string]interface{}{bodyMap}},
+		}
 	}
-	return responseError(resp)
+	_, err = client.Issue.Move(context.Background(), issue, transitionID, options)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issueLinkType-getIssueLinkTypes
-func (j *Jira) GetIssueLinkTypes() (*jiradata.IssueLinkTypes, error) {
+func (j *Jira) GetIssueLinkTypes() ([]*models.LinkTypeScheme, error) {
 	return GetIssueLinkTypes(j.UA, j.Endpoint)
 }
 
-func GetIssueLinkTypes(ua HttpClient, endpoint string) (*jiradata.IssueLinkTypes, error) {
-	uri := URLJoin(endpoint, "rest/api/2/issueLinkType")
-	resp, err := ua.GetJSON(uri)
+func GetIssueLinkTypes(ua HttpClient, endpoint string) ([]*models.LinkTypeScheme, error) {
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := struct {
-			IssueLinkTypes jiradata.IssueLinkTypes
-		}{
-			IssueLinkTypes: jiradata.IssueLinkTypes{},
-		}
-		return &results.IssueLinkTypes, json.NewDecoder(resp.Body).Decode(&results)
+	result, _, err := client.Issue.Link.Type.Gets(context.Background())
+	if err != nil {
+		return nil, err
 	}
-	return nil, responseError(resp)
+	return result.IssueLinkTypes, nil
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-addVote
@@ -413,17 +375,12 @@ func (j *Jira) IssueAddVote(issue string) error {
 }
 
 func IssueAddVote(ua HttpClient, endpoint string, issue string) error {
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "votes")
-	resp, err := ua.Post(uri, "application/json", strings.NewReader("{}"))
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
+	_, err = client.Issue.Vote.Add(context.Background(), issue)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-removeVote
@@ -432,30 +389,20 @@ func (j *Jira) IssueRemoveVote(issue string) error {
 }
 
 func IssueRemoveVote(ua HttpClient, endpoint string, issue string) error {
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "votes")
-	resp, err := ua.Delete(uri)
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
-}
-
-type RankRequestProvider interface {
-	ProvideRankRequest() *jiradata.RankRequest
+	_, err = client.Issue.Vote.Delete(context.Background(), issue)
+	return err
 }
 
 // https://docs.atlassian.com/jira-software/REST/cloud/#agile/1.0/issue-rankIssues
-func (j *Jira) RankIssues(rrp RankRequestProvider) error {
-	return RankIssues(j.UA, j.Endpoint, rrp)
+func (j *Jira) RankIssues(req *RankRequest) error {
+	return RankIssues(j.UA, j.Endpoint, req)
 }
 
-func RankIssues(ua HttpClient, endpoint string, rrp RankRequestProvider) error {
-	req := rrp.ProvideRankRequest()
+func RankIssues(ua HttpClient, endpoint string, req *RankRequest) error {
 	encoded, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -479,17 +426,12 @@ func (j *Jira) IssueAddWatcher(issue, user string) error {
 }
 
 func IssueAddWatcher(ua HttpClient, endpoint string, issue, user string) error {
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "watchers")
-	resp, err := ua.Post(uri, "application/json", strings.NewReader(fmt.Sprintf("%q", user)))
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
+	_, err = client.Issue.Watcher.Add(context.Background(), issue, user)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-addWatcher
@@ -498,51 +440,27 @@ func (j *Jira) IssueRemoveWatcher(issue, user string) error {
 }
 
 func IssueRemoveWatcher(ua HttpClient, endpoint string, issue, user string) error {
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "watchers")
-	uri += fmt.Sprintf("?accountId=%s", user)
-	resp, err := ua.Delete(uri)
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
-}
-
-type CommentProvider interface {
-	ProvideComment() *jiradata.Comment
+	_, err = client.Issue.Watcher.Delete(context.Background(), issue, user)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue/{issueIdOrKey}/comment-addComment
-func (j *Jira) IssueAddComment(issue string, cp CommentProvider) (*jiradata.Comment, error) {
-	return IssueAddComment(j.UA, j.Endpoint, issue, cp)
+func (j *Jira) IssueAddComment(issue string, req *models.IssueCommentSchemeV2) (*models.IssueCommentSchemeV2, error) {
+	return IssueAddComment(j.UA, j.Endpoint, issue, req)
 }
 
-func IssueAddComment(ua HttpClient, endpoint string, issue string, cp CommentProvider) (*jiradata.Comment, error) {
-	req := cp.ProvideComment()
-	encoded, err := json.Marshal(req)
+func IssueAddComment(ua HttpClient, endpoint string, issue string, req *models.IssueCommentSchemeV2) (*models.IssueCommentSchemeV2, error) {
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "comment")
-	resp, err := ua.Post(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 201 {
-		results := jiradata.Comment{}
-		return &results, json.NewDecoder(resp.Body).Decode(&results)
-	}
-	return nil, responseError(resp)
-}
-
-type UserProvider interface {
-	ProvideUser() *jiradata.User
+	payload := &models.CommentPayloadSchemeV2{Body: req.Body, Visibility: req.Visibility}
+	result, _, err := client.Issue.Comment.Add(context.Background(), issue, payload, nil)
+	return result, err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-assign
@@ -551,98 +469,62 @@ func (j *Jira) IssueAssign(issue, name string) error {
 }
 
 func IssueAssign(ua HttpClient, endpoint string, issue, name string) error {
-	// this is special, not using the jiradata.User structure
-	// because we need to be able to send `null` as the name param
-	// when we want to un-assign the issue
-	req := struct {
-		Name *string `json:"name"`
-	}{&name}
 	if name == "" {
-		req.Name = nil
+		return IssueAssignAccountID(ua, endpoint, issue, "")
 	}
-
-	encoded, err := json.Marshal(req)
+	users, err := UserSearch(ua, endpoint, &UserSearchOptions{Query: name, MaxResults: 10})
 	if err != nil {
 		return err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "assignee")
-	resp, err := ua.Put(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return err
+	if len(users) == 0 {
+		return fmt.Errorf("user %q not found", name)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
+	return IssueAssignAccountID(ua, endpoint, issue, users[0].AccountID)
 }
 
 func IssueAssignAccountID(ua HttpClient, endpoint string, issue, acctId string) error {
-	// this is special, not using the jiradata.User structure
-	// because we need to be able to send `null` as the name param
-	// when we want to un-assign the issue
-	req := struct {
-		AccountID *string `json:"accountId"`
-	}{&acctId}
 	if acctId == "" {
-		req.AccountID = nil
+		// Unassign: go-atlassian enforces non-empty accountId, so send null directly.
+		req := struct {
+			AccountID *string `json:"accountId"`
+		}{nil}
+		encoded, err := json.Marshal(req)
+		if err != nil {
+			return err
+		}
+		uri := URLJoin(endpoint, "rest/api/2/issue", issue, "assignee")
+		resp, err := ua.Put(uri, "application/json", bytes.NewBuffer(encoded))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == 204 {
+			return nil
+		}
+		return responseError(resp)
 	}
-
-	encoded, err := json.Marshal(req)
+	client, err := newAtlassianClientV2(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/issue", issue, "assignee")
-	resp, err := ua.Put(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
+	_, err = client.Issue.Assign(context.Background(), issue, acctId)
+	return err
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue/{issueIdOrKey}/attachments-addAttachment
-func (j *Jira) IssueAttachFile(issue, filename string, contents io.Reader) (*jiradata.ListOfAttachment, error) {
+func (j *Jira) IssueAttachFile(issue, filename string, contents io.Reader) (*ListOfAttachment, error) {
 	return IssueAttachFile(j.UA, j.Endpoint, issue, filename, contents)
 }
 
-func IssueAttachFile(ua HttpClient, endpoint string, issue, filename string, contents io.Reader) (*jiradata.ListOfAttachment, error) {
-	var buf bytes.Buffer
-	w := multipart.NewWriter(&buf)
-	formFile, err := w.CreateFormFile("file", filename)
+func IssueAttachFile(ua HttpClient, endpoint string, issue, filename string, contents io.Reader) (*ListOfAttachment, error) {
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	_, err = io.Copy(formFile, contents)
+	result, _, err := client.Issue.Attachment.Add(context.Background(), issue, filename, contents)
 	if err != nil {
 		return nil, err
 	}
-
-	uri, err := url.Parse(URLJoin(endpoint, "rest/api/2/issue", issue, "attachments"))
-	if err != nil {
-		return nil, err
-	}
-	req := oreo.RequestBuilder(uri).WithMethod("POST").WithHeader(
-		"X-Atlassian-Token", "no-check",
-	).WithHeader(
-		"Accept", "application/json",
-	).WithContentType(w.FormDataContentType()).WithBody(&buf).Build()
-	w.Close()
-
-	resp, err := ua.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := jiradata.ListOfAttachment{}
-		return &results, json.NewDecoder(resp.Body).Decode(&results)
-	}
-	return nil, responseError(resp)
+	out := ListOfAttachment(result)
+	return &out, nil
 }

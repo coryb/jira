@@ -8,16 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/go-jira/jira/jiradata"
 	"gopkg.in/AlecAivazis/survey.v1"
 )
-
-func (o *GlobalOptions) ProvideAuthParams() *jiradata.AuthParams {
-	return &jiradata.AuthParams{
-		Username: o.Login.Value,
-		Password: o.GetPass(),
-	}
-}
 
 func (o *GlobalOptions) keyName() string {
 	user := o.Login.Value

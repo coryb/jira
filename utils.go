@@ -1,10 +1,19 @@
 package jira
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path"
 )
+
+func jsonRoundTrip(src, dst interface{}) error {
+	data, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, dst)
+}
 
 func URLJoin(endpoint string, paths ...string) string {
 	u, err := url.Parse(endpoint)

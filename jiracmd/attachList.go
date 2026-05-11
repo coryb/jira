@@ -7,7 +7,6 @@ import (
 	"github.com/coryb/oreo"
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -52,7 +51,7 @@ func CmdAttachList(o *oreo.Client, globals *jiracli.GlobalOptions, opts *AttachL
 
 	// need to conver the interface{} "attachment" field to an actual
 	// ListOfAttachment object so we can sort it
-	var attachments jiradata.ListOfAttachment
+	var attachments jira.ListOfAttachment
 	err = jiracli.ConvertType(data.Fields["attachment"], &attachments)
 	if err != nil {
 		return err

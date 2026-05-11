@@ -1,46 +1,50 @@
 package jira
 
 import (
-	"encoding/json"
+	"context"
+	"io"
 
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
-// https://docs.atlassian.com/jira/REST/cloud/#api/2/attachment-getAttachment
-func (j *Jira) GetAttachment(id string) (*jiradata.Attachment, error) {
+func (j *Jira) GetAttachment(id string) (*models.IssueAttachmentMetadataScheme, error) {
 	return GetAttachment(j.UA, j.Endpoint, id)
 }
 
-func GetAttachment(ua HttpClient, endpoint string, id string) (*jiradata.Attachment, error) {
-	uri := URLJoin(endpoint, "rest/api/2/attachment", id)
-	resp, err := ua.GetJSON(uri)
+func GetAttachment(ua HttpClient, endpoint string, id string) (*models.IssueAttachmentMetadataScheme, error) {
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := &jiradata.Attachment{}
-		return results, json.NewDecoder(resp.Body).Decode(results)
-	}
-	return nil, responseError(resp)
+	result, _, err := client.Issue.Attachment.Metadata(context.Background(), id)
+	return result, err
 }
 
-// https://docs.atlassian.com/jira/REST/cloud/#api/2/attachment-removeAttachment
+func (j *Jira) DownloadAttachment(id string) (io.Reader, error) {
+	return DownloadAttachment(j.UA, j.Endpoint, id)
+}
+
+func DownloadAttachment(ua HttpClient, endpoint string, id string) (io.Reader, error) {
+	client, err := newAtlassianClient(ua, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Issue.Attachment.Download(context.Background(), id, true)
+	if err != nil {
+		return nil, err
+	}
+	return &resp.Bytes, nil
+}
+
 func (j *Jira) RemoveAttachment(id string) error {
 	return RemoveAttachment(j.UA, j.Endpoint, id)
 }
 
 func RemoveAttachment(ua HttpClient, endpoint string, id string) error {
-	uri := URLJoin(endpoint, "rest/api/2/attachment", id)
-	resp, err := ua.Delete(uri)
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		return nil
-	}
-	return responseError(resp)
+	_, err = client.Issue.Attachment.Delete(context.Background(), id)
+	return err
 }

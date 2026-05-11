@@ -3,12 +3,34 @@ package jira
 import (
 	"bytes"
 	"encoding/json"
-
-	"github.com/go-jira/jira/jiradata"
 )
 
-type AuthProvider interface {
-	ProvideAuthParams() *jiradata.AuthParams
+type AuthParams struct {
+	Password string `json:"password,omitempty" yaml:"password,omitempty"`
+	Username string `json:"username,omitempty" yaml:"username,omitempty"`
+}
+
+type SessionInfo struct {
+	Name  string `json:"name,omitempty" yaml:"name,omitempty"`
+	Value string `json:"value,omitempty" yaml:"value,omitempty"`
+}
+
+type LoginInfo struct {
+	FailedLoginCount    int    `json:"failedLoginCount,omitempty" yaml:"failedLoginCount,omitempty"`
+	LastFailedLoginTime string `json:"lastFailedLoginTime,omitempty" yaml:"lastFailedLoginTime,omitempty"`
+	LoginCount          int    `json:"loginCount,omitempty" yaml:"loginCount,omitempty"`
+	PreviousLoginTime   string `json:"previousLoginTime,omitempty" yaml:"previousLoginTime,omitempty"`
+}
+
+type AuthSuccess struct {
+	LoginInfo *LoginInfo   `json:"loginInfo,omitempty" yaml:"loginInfo,omitempty"`
+	Session   *SessionInfo `json:"session,omitempty" yaml:"session,omitempty"`
+}
+
+type CurrentUser struct {
+	LoginInfo *LoginInfo `json:"loginInfo,omitempty" yaml:"loginInfo,omitempty"`
+	Name      string     `json:"name,omitempty" yaml:"name,omitempty"`
+	Self      string     `json:"self,omitempty" yaml:"self,omitempty"`
 }
 
 type AuthOptions struct {
@@ -16,20 +38,13 @@ type AuthOptions struct {
 	Password string
 }
 
-func (a *AuthOptions) ProvideAuthParams() *jiradata.AuthParams {
-	return &jiradata.AuthParams{
-		Username: a.Username,
-		Password: a.Password,
-	}
-}
-
 // https://docs.atlassian.com/jira/REST/cloud/#auth/1/session-login
-func (j *Jira) NewSession(ap AuthProvider) (*jiradata.AuthSuccess, error) {
+func (j *Jira) NewSession(ap *AuthOptions) (*AuthSuccess, error) {
 	return NewSession(j.UA, j.Endpoint, ap)
 }
 
-func NewSession(ua HttpClient, endpoint string, ap AuthProvider) (*jiradata.AuthSuccess, error) {
-	req := ap.ProvideAuthParams()
+func NewSession(ua HttpClient, endpoint string, ap *AuthOptions) (*AuthSuccess, error) {
+	req := &AuthParams{Username: ap.Username, Password: ap.Password}
 	encoded, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -42,18 +57,18 @@ func NewSession(ua HttpClient, endpoint string, ap AuthProvider) (*jiradata.Auth
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		results := &jiradata.AuthSuccess{}
+		results := &AuthSuccess{}
 		return results, json.NewDecoder(resp.Body).Decode(results)
 	}
 	return nil, responseError(resp)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#auth/1/session-currentUser
-func (j *Jira) GetSession() (*jiradata.CurrentUser, error) {
+func (j *Jira) GetSession() (*CurrentUser, error) {
 	return GetSession(j.UA, j.Endpoint)
 }
 
-func GetSession(ua HttpClient, endpoint string) (*jiradata.CurrentUser, error) {
+func GetSession(ua HttpClient, endpoint string) (*CurrentUser, error) {
 	uri := URLJoin(endpoint, "rest/auth/1/session")
 	resp, err := ua.GetJSON(uri)
 	if err != nil {
@@ -62,7 +77,7 @@ func GetSession(ua HttpClient, endpoint string) (*jiradata.CurrentUser, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		results := &jiradata.CurrentUser{}
+		results := &CurrentUser{}
 		return results, json.NewDecoder(resp.Body).Decode(results)
 	}
 	return nil, responseError(resp)

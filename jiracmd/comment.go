@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -55,7 +55,7 @@ func CmdCommentUsage(cmd *kingpin.CmdClause, opts *CommentOptions) error {
 
 // CmdComment will update issue with comment
 func CmdComment(o *oreo.Client, globals *jiracli.GlobalOptions, opts *CommentOptions) error {
-	comment := jiradata.Comment{}
+	comment := models.IssueCommentSchemeV2{}
 	input := struct {
 		Overrides map[string]string `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 	}{
@@ -70,7 +70,7 @@ func CmdComment(o *oreo.Client, globals *jiracli.GlobalOptions, opts *CommentOpt
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+		fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 	}
 
 	if opts.Browse.Value {

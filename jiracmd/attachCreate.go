@@ -90,7 +90,7 @@ func CmdAttachCreate(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Attac
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %d %s\n", (*attachments)[0].ID, (*attachments)[0].Content)
+		fmt.Printf("OK %s %s\n", (*attachments)[0].ID, (*attachments)[0].Content)
 	}
 
 	if opts.Browse.Value {

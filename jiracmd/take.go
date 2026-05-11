@@ -3,6 +3,7 @@ package jiracmd
 import (
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
+	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -19,7 +20,18 @@ func CmdTakeRegistry() *jiracli.CommandRegistryEntry {
 		func(o *oreo.Client, globals *jiracli.GlobalOptions) error {
 			opts.Issue = jiracli.FormatIssue(opts.Issue, opts.Project)
 			if opts.Assignee == "" {
-				opts.Assignee = globals.Login.Value
+				if err := ensureServerInfo(o, globals); err != nil {
+					return err
+				}
+				me, err := jira.GetCurrentUser(o, globals.Endpoint.Value)
+				if err != nil {
+					return err
+				}
+				if globals.JiraDeploymentType.Value == jiracli.CloudDeploymentType {
+					opts.Assignee = me.AccountID
+				} else {
+					opts.Assignee = me.Name
+				}
 			}
 			return CmdAssign(o, globals, &opts)
 		},

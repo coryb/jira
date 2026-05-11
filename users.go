@@ -1,12 +1,9 @@
 package jira
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/url"
-	"strings"
+	"context"
 
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
 type UserSearchOptions struct {
@@ -20,36 +17,20 @@ type UserSearchOptions struct {
 
 // https://developer.atlassian.com/cloud/jira/platform/rest/v2/#api-rest-api-2-user-search-get
 
-func UserSearch(ua HttpClient, endpoint string, opts *UserSearchOptions) ([]*jiradata.User, error) {
-	uri := URLJoin(endpoint, "rest/api/2/user/search")
-	params := []string{}
-	if opts.Query != "" {
-		params = append(params, "query="+url.QueryEscape(opts.Query))
-	}
-	if opts.AccountID != "" {
-		params = append(params, "accountId="+url.QueryEscape(opts.AccountID))
-	}
-	if opts.StartAt != 0 {
-		params = append(params, fmt.Sprintf("startAt=%d", opts.StartAt))
-	}
-	if opts.MaxResults != 0 {
-		params = append(params, fmt.Sprintf("maxResults=%d", opts.MaxResults))
-	}
-	if opts.Property != "" {
-		params = append(params, "property="+url.QueryEscape(opts.Property))
-	}
-	if len(params) > 0 {
-		uri += "?" + strings.Join(params, "&")
-	}
-	resp, err := ua.GetJSON(uri)
+func UserSearch(ua HttpClient, endpoint string, opts *UserSearchOptions) ([]*models.UserScheme, error) {
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	result, _, err := client.User.Search.Do(context.Background(), opts.AccountID, opts.Query, opts.StartAt, opts.MaxResults)
+	return result, err
+}
 
-	if resp.StatusCode == 200 {
-		results := []*jiradata.User{}
-		return results, json.NewDecoder(resp.Body).Decode(&results)
+func GetCurrentUser(ua HttpClient, endpoint string) (*models.UserScheme, error) {
+	client, err := newAtlassianClient(ua, endpoint)
+	if err != nil {
+		return nil, err
 	}
-	return nil, responseError(resp)
+	result, _, err := client.MySelf.Details(context.Background(), nil)
+	return result, err
 }

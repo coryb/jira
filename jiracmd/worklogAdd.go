@@ -5,17 +5,17 @@ import (
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type WorklogAddOptions struct {
-	jiracli.CommonOptions `yaml:",inline" json:",inline" figtree:",inline"`
-	jiradata.Worklog      `yaml:",inline" json:",inline" figtree:",inline"`
-	Project               string `yaml:"project,omitempty" json:"project,omitempty"`
-	Issue                 string `yaml:"issue,omitempty" json:"issue,omitempty"`
+	jiracli.CommonOptions            `yaml:",inline" json:",inline" figtree:",inline"`
+	models.IssueWorklogRichTextScheme `yaml:",inline" json:",inline" figtree:",inline"`
+	Project                          string `yaml:"project,omitempty" json:"project,omitempty"`
+	Issue                            string `yaml:"issue,omitempty" json:"issue,omitempty"`
 }
 
 func CmdWorklogAddRegistry() *jiracli.CommandRegistryEntry {
@@ -53,15 +53,15 @@ func CmdWorklogAddUsage(cmd *kingpin.CmdClause, opts *WorklogAddOptions) error {
 // It will spawn the editor (unless --noedit isused) and post edited YAML
 // content as JSON to the worklog endpoint
 func CmdWorklogAdd(o *oreo.Client, globals *jiracli.GlobalOptions, opts *WorklogAddOptions) error {
-	err := jiracli.EditLoop(&opts.CommonOptions, &opts.Worklog, &opts.Worklog, func() error {
-		_, err := jira.AddIssueWorklog(o, globals.Endpoint.Value, opts.Issue, opts)
+	err := jiracli.EditLoop(&opts.CommonOptions, &opts.IssueWorklogRichTextScheme, &opts.IssueWorklogRichTextScheme, func() error {
+		_, err := jira.AddIssueWorklog(o, globals.Endpoint.Value, opts.Issue, &opts.IssueWorklogRichTextScheme)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+		fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 	}
 	if opts.Browse.Value {
 		return CmdBrowse(globals, opts.Issue)

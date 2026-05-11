@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -69,7 +69,7 @@ func CmdTransitionUsage(cmd *kingpin.CmdClause, opts *TransitionOptions) error {
 	return nil
 }
 
-func defaultResolution(transMeta *jiradata.Transition) string {
+func defaultResolution(transMeta *jira.Transition) string {
 	if resField, ok := transMeta.Fields["resolution"]; ok {
 		for _, allowedValueRaw := range resField.AllowedValues {
 			if allowedValue, ok := allowedValueRaw.(map[string]interface{}); ok {
@@ -86,12 +86,8 @@ func defaultResolution(transMeta *jiradata.Transition) string {
 
 // CmdTransition will move state of the given issue to the given transtion
 func CmdTransition(o *oreo.Client, globals *jiracli.GlobalOptions, opts *TransitionOptions) error {
-	if globals.JiraDeploymentType.Value == "" {
-		serverInfo, err := jira.ServerInfo(o, globals.Endpoint.Value)
-		if err != nil {
-			return err
-		}
-		globals.JiraDeploymentType.Value = strings.ToLower(serverInfo.DeploymentType)
+	if err := ensureServerInfo(o, globals); err != nil {
+		return err
 	}
 
 	issueData, err := jira.GetIssue(o, globals.Endpoint.Value, opts.Issue, nil)
@@ -134,16 +130,16 @@ func CmdTransition(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Transit
 	opts.Overrides["resolution"] = opts.Resolution
 
 	type templateInput struct {
-		*jiradata.Issue `yaml:",inline"`
+		*jira.Issue `yaml:",inline"`
 		// Yes, Meta and Transition are redundant, but this is for backwards compatibility
 		// with old templates
-		Meta       *jiradata.Transition `yaml:"meta,omitempty" json:"meta,omitempty"`
-		Transition *jiradata.Transition `yaml:"transition,omitempty" json:"transition,omitempty"`
+		Meta       *jira.Transition `yaml:"meta,omitempty" json:"meta,omitempty"`
+		Transition *jira.Transition `yaml:"transition,omitempty" json:"transition,omitempty"`
 		Overrides  map[string]string    `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 	}
 
 	if _, ok := transMeta.Fields["comment"]; !ok && opts.Overrides["comment"] != "" {
-		comment := jiradata.Comment{
+		comment := models.IssueCommentSchemeV2{
 			Body: opts.Overrides["comment"],
 		}
 		if _, err := jira.IssueAddComment(o, globals.Endpoint.Value, opts.Issue, &comment); err != nil {
@@ -151,7 +147,7 @@ func CmdTransition(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Transit
 		}
 	}
 
-	issueUpdate := jiradata.IssueUpdate{}
+	issueUpdate := jira.IssueUpdate{}
 	input := templateInput{
 		Issue:      issueData,
 		Meta:       transMeta,
@@ -191,7 +187,7 @@ func CmdTransition(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Transit
 		return jiracli.CliError(err)
 	}
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", issueData.Key, jira.URLJoin(globals.Endpoint.Value, "browse", issueData.Key))
+		fmt.Printf("OK %s %s\n", issueData.Key, globals.BrowseURL(issueData.Key))
 	}
 
 	if opts.Browse.Value {

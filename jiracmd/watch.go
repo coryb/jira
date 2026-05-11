@@ -2,7 +2,6 @@ package jiracmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
@@ -64,17 +63,14 @@ func CmdWatch(o *oreo.Client, globals *jiracli.GlobalOptions, opts *WatchOptions
 		opts.Watcher = globals.Login.Value
 	}
 
-	if globals.JiraDeploymentType.Value == "" {
-		serverInfo, err := jira.ServerInfo(o, globals.Endpoint.Value)
-		if err != nil {
-			return err
-		}
-		globals.JiraDeploymentType.Value = strings.ToLower(serverInfo.DeploymentType)
+	if err := ensureServerInfo(o, globals); err != nil {
+		return err
 	}
 
 	if globals.JiraDeploymentType.Value == jiracli.CloudDeploymentType {
 		users, err := jira.UserSearch(o, globals.Endpoint.Value, &jira.UserSearchOptions{
-			Query: opts.Watcher,
+			Query:      opts.Watcher,
+			MaxResults: 10,
 		})
 		if err != nil {
 			return err
@@ -97,7 +93,7 @@ func CmdWatch(o *oreo.Client, globals *jiracli.GlobalOptions, opts *WatchOptions
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+		fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 	}
 
 	if opts.Browse.Value {

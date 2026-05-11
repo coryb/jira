@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -47,7 +46,7 @@ func CmdRankUsage(cmd *kingpin.CmdClause, opts *RankOptions) error {
 
 // CmdRank order two issue
 func CmdRank(o *oreo.Client, globals *jiracli.GlobalOptions, opts *RankOptions) error {
-	req := &jiradata.RankRequest{
+	req := &jira.RankRequest{
 		Issues: []string{opts.First},
 	}
 
@@ -62,8 +61,8 @@ func CmdRank(o *oreo.Client, globals *jiracli.GlobalOptions, opts *RankOptions) 
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.First, jira.URLJoin(globals.Endpoint.Value, "browse", opts.First))
-		fmt.Printf("OK %s %s\n", opts.Second, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Second))
+		fmt.Printf("OK %s %s\n", opts.First, globals.BrowseURL(opts.First))
+		fmt.Printf("OK %s %s\n", opts.Second, globals.BrowseURL(opts.Second))
 	}
 
 	if opts.Browse.Value {

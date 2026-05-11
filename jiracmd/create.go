@@ -3,21 +3,20 @@ package jiracmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/coryb/yaml.v2"
 )
 
 type CreateOptions struct {
 	jiracli.CommonOptions `yaml:",inline" json:",inline" figtree:",inline"`
-	jiradata.IssueUpdate  `yaml:",inline" json:",inline" figtree:",inline"`
+	jira.IssueUpdate  `yaml:",inline" json:",inline" figtree:",inline"`
 	Project               string            `yaml:"project,omitempty" json:"project,omitempty"`
 	Summary               string            `yaml:"summary,omitempty" json:"summary`
 	IssueType             string            `yaml:"issuetype,omitempty" json:"issuetype,omitempty"`
@@ -66,16 +65,12 @@ func CmdCreateUsage(cmd *kingpin.CmdClause, opts *CreateOptions) error {
 // CmdCreate sends the create-metadata to the "create" template for editing, then
 // will parse the edited document as YAML and submit the document to jira.
 func CmdCreate(o *oreo.Client, globals *jiracli.GlobalOptions, opts *CreateOptions) error {
-	if globals.JiraDeploymentType.Value == "" {
-		serverInfo, err := jira.ServerInfo(o, globals.Endpoint.Value)
-		if err != nil {
-			return err
-		}
-		globals.JiraDeploymentType.Value = strings.ToLower(serverInfo.DeploymentType)
+	if err := ensureServerInfo(o, globals); err != nil {
+		return err
 	}
 
 	type templateInput struct {
-		Meta      *jiradata.IssueType `yaml:"meta" json:"meta"`
+		Meta      *jira.IssueType `yaml:"meta" json:"meta"`
 		Overrides map[string]string   `yaml:"overrides" json:"overrides"`
 	}
 
@@ -87,7 +82,7 @@ func CmdCreate(o *oreo.Client, globals *jiracli.GlobalOptions, opts *CreateOptio
 		return err
 	}
 
-	issueUpdate := jiradata.IssueUpdate{}
+	issueUpdate := jira.IssueUpdate{}
 	input := templateInput{
 		Meta:      createMeta,
 		Overrides: opts.Overrides,
@@ -98,8 +93,11 @@ func CmdCreate(o *oreo.Client, globals *jiracli.GlobalOptions, opts *CreateOptio
 	}
 	input.Overrides["issuetype"] = opts.IssueType
 	input.Overrides["login"] = globals.Login.Value
+	if me, err := jira.GetCurrentUser(o, globals.Endpoint.Value); err == nil && me.DisplayName != "" {
+		input.Overrides["displayName"] = me.DisplayName
+	}
 
-	var issueResp *jiradata.IssueCreateResponse
+	var issueResp *models.IssueResponseScheme
 	var fnameOptsFile string
 	fnameOptsFile = opts.File.String()
 	if fnameOptsFile != "" {
@@ -123,7 +121,7 @@ func CmdCreate(o *oreo.Client, globals *jiracli.GlobalOptions, opts *CreateOptio
 		return err
 	}
 
-	browseLink := jira.URLJoin(globals.Endpoint.Value, "browse", issueResp.Key)
+	browseLink := globals.BrowseURL(issueResp.Key)
 	if !globals.Quiet.Value {
 		fmt.Printf("OK %s %s\n", issueResp.Key, browseLink)
 	}

@@ -14,6 +14,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
@@ -34,10 +35,11 @@ type Exit struct {
 // and exit accordingly.
 //
 // Example:
-// func main() {
-//     defer jiracli.HandleExit()
-//     ...
-// }
+//
+//	func main() {
+//	    defer jiracli.HandleExit()
+//	    ...
+//	}
 func HandleExit() {
 	if e := recover(); e != nil {
 		if exit, ok := e.(Exit); ok {
@@ -57,7 +59,7 @@ const (
 type GlobalOptions struct {
 	// AuthenticationMethod is the method we use to authenticate with the jira serivce.
 	// Possible values are "api-token", "bearer-token" or "session".
-	// The default is "api-token" when the service endpoint ends with "atlassian.net", otherwise it "session".  Session authentication
+	// The default is "api-token" when the service endpoint ends with "atlassian.net", otherwise is "session".  Session authentication
 	// will promt for user password and use the /auth/1/session-login endpoint.
 	AuthenticationMethod figtree.StringOption `yaml:"authentication-method,omitempty" json:"authentication-method,omitempty"`
 
@@ -112,6 +114,39 @@ type GlobalOptions struct {
 	// JiraDeploymentType can be `cloud` or `server`, if not set it will be inferred from
 	// the /rest/api/2/serverInfo REST API.
 	JiraDeploymentType figtree.StringOption `yaml:"jira-deployment-type,omitempty" json:"jira-deployment-type,omitempty"`
+
+	// BaseURL is the canonical public URL for the Jira instance, as returned by serverInfo.baseUrl.
+	// This may differ from Endpoint when the endpoint is a proxy. Used for display/browse links.
+	// If not set, Endpoint is used as a fallback.
+	BaseURL figtree.StringOption `yaml:"base-url,omitempty" json:"base-url,omitempty"`
+}
+
+// GlobalOptionsProvider is an interface that can be implemented by external
+// packages to provide global options to the CLI.
+type GlobalOptionsProvider interface {
+	Apply(*GlobalOptions) error
+}
+
+var globalOptionsProviderMu = &sync.Mutex{}
+var globalOptionsProviders []GlobalOptionsProvider
+
+// RegisterGlobalOptionsProvider allows external packages to register a provider
+// that can set global options before any command is executed.  This is useful
+// for providing global options via environment variables or config files.
+func RegisterGlobalOptionsProvider(provider GlobalOptionsProvider) {
+	globalOptionsProviderMu.Lock()
+	defer globalOptionsProviderMu.Unlock()
+	globalOptionsProviders = append(globalOptionsProviders, provider)
+}
+
+// BrowseURL returns the canonical URL for browsing an issue.
+// Uses BaseURL if set (e.g. from serverInfo), otherwise falls back to Endpoint.
+func (g *GlobalOptions) BrowseURL(issue string) string {
+	base := g.BaseURL.Value
+	if base == "" {
+		base = g.Endpoint.Value
+	}
+	return strings.TrimRight(base, "/") + "/browse/" + issue
 }
 
 type CommonOptions struct {
@@ -134,6 +169,7 @@ type CommandRegistry struct {
 	Aliases []string
 	Entry   *CommandRegistryEntry
 	Default bool
+	Group   string
 }
 
 // either kingpin.Application or kingpin.CmdClause fit this interface
@@ -149,14 +185,14 @@ func RegisterCommand(regEntry CommandRegistry) {
 }
 
 func (o *GlobalOptions) AuthMethod() string {
-	if strings.Contains(o.Endpoint.Value, ".atlassian.net") && o.AuthenticationMethod.Source == "default" {
+	if strings.Contains(o.Endpoint.Value, ".atlassian.net") && o.AuthenticationMethod.IsDefault() {
 		return "api-token"
 	}
 	return o.AuthenticationMethod.Value
 }
 
-func (o *GlobalOptions) AuthMethodIsToken() bool{
-	return o.AuthMethod() == "api-token" || o.AuthMethod() == "bearer-token";
+func (o *GlobalOptions) AuthMethodIsToken() bool {
+	return o.AuthMethod() == "api-token" || o.AuthMethod() == "bearer-token"
 }
 
 func register(app *kingpin.Application, o *oreo.Client, fig *figtree.FigTree) {
@@ -164,7 +200,8 @@ func register(app *kingpin.Application, o *oreo.Client, fig *figtree.FigTree) {
 		User:                 figtree.NewStringOption(os.Getenv("USER")),
 		AuthenticationMethod: figtree.NewStringOption("session"),
 	}
-	app.Flag("endpoint", "Base URI to use for Jira").Short('e').SetValue(&globals.Endpoint)
+	app.Flag("endpoint", "Base URI to use for Jira").Short('e').Envar("JIRA_HOST").SetValue(&globals.Endpoint)
+	app.Flag("auth-method", "Method we use to authenticate with the jira service").Envar("JIRA_AUTH_METHOD").SetValue(&globals.AuthenticationMethod)
 	app.Flag("insecure", "Disable TLS certificate verification").Short('k').SetValue(&globals.Insecure)
 	app.Flag("quiet", "Suppress output to console").Short('Q').SetValue(&globals.Quiet)
 	app.Flag("unixproxy", "Path for a unix-socket proxy").SetValue(&globals.UnixProxy)
@@ -264,6 +301,14 @@ func register(app *kingpin.Application, o *oreo.Client, fig *figtree.FigTree) {
 			if logging.GetLevel("") > logging.DEBUG {
 				o = o.WithTrace(true)
 			}
+			globalOptionsProviderMu.Lock()
+			for _, gop := range globalOptionsProviders {
+				if err := gop.Apply(&globals); err != nil {
+					globalOptionsProviderMu.Unlock()
+					return fmt.Errorf("error applying global options: %w", err)
+				}
+			}
+			globalOptionsProviderMu.Unlock()
 			return copy.Entry.ExecuteFunc(o, &globals)
 		})
 	}

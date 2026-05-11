@@ -2,7 +2,6 @@ package jiracmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
@@ -49,39 +48,17 @@ func CmdAssignUsage(cmd *kingpin.CmdClause, opts *AssignOptions) error {
 
 // CmdAssign will assign an issue to a user
 func CmdAssign(o *oreo.Client, globals *jiracli.GlobalOptions, opts *AssignOptions) error {
-	if globals.JiraDeploymentType.Value == "" {
-		serverInfo, err := jira.ServerInfo(o, globals.Endpoint.Value)
-		if err != nil {
-			return err
-		}
-		globals.JiraDeploymentType.Value = strings.ToLower(serverInfo.DeploymentType)
+	if err := ensureServerInfo(o, globals); err != nil {
+		return err
 	}
 
-	assignFunc := jira.IssueAssign
-	if globals.JiraDeploymentType.Value == jiracli.CloudDeploymentType {
-		if opts.Assignee != "" && opts.Assignee != "-1" {
-			users, err := jira.UserSearch(o, globals.Endpoint.Value, &jira.UserSearchOptions{
-				Query: opts.Assignee,
-			})
-			if err != nil {
-				return err
-			}
-			if len(users) > 1 {
-				return fmt.Errorf("Found %d accounts for users with username %q", len(users), opts.Assignee)
-			} else if len(users) == 1 {
-				opts.Assignee = users[0].AccountID
-			}
-		}
-		assignFunc = jira.IssueAssignAccountID
-	}
-
-	err := assignFunc(o, globals.Endpoint.Value, opts.Issue, opts.Assignee)
+	err := jira.IssueAssign(o, globals.Endpoint.Value, opts.Issue, opts.Assignee)
 	if err != nil {
 		return err
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+		fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 	}
 
 	if opts.Browse.Value {

@@ -2,15 +2,17 @@ package jira
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/go-jira/jira/jiradata"
+	jv3 "github.com/ctreminiom/go-atlassian/v2/jira/v3"
+	"github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
 type SearchProvider interface {
-	ProvideSearchRequest() *jiradata.SearchRequest
+	ProvideSearchRequest() *SearchRequest
 }
 
 type SearchOptions struct {
@@ -27,8 +29,8 @@ type SearchOptions struct {
 	MaxResults  int    `yaml:"max-results,omitempty" json:"max-results,omitempty"`
 }
 
-func (o *SearchOptions) ProvideSearchRequest() *jiradata.SearchRequest {
-	req := &jiradata.SearchRequest{}
+func (o *SearchOptions) ProvideSearchRequest() *SearchRequest {
+	req := &SearchRequest{}
 
 	if o.Query == "" {
 		qbuff := bytes.NewBufferString("resolution = unresolved")
@@ -73,9 +75,9 @@ func (o *SearchOptions) ProvideSearchRequest() *jiradata.SearchRequest {
 }
 
 // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/#api-rest-api-3-search-jql-post
-func (j *Jira) Search(sp SearchProvider, opts ...SearchOpt) (*jiradata.SearchResults, error) {
-	return Search(j.UA, j.Endpoint, sp, opts...)
-}
+// func (j *Jira) Search(sp SearchProvider, opts ...SearchOpt) (*SearchResults, error) {
+// 	return Search(j.UA, j.Endpoint, sp, opts...)
+// }
 
 type searchConfig struct {
 	autoPaginate bool
@@ -89,7 +91,53 @@ func WithAutoPagination() SearchOpt {
 	}
 }
 
-func Search(ua HttpClient, endpoint string, sp SearchProvider, opts ...SearchOpt) (*jiradata.SearchResults, error) {
+// SearchIssues performs a JQL search using the official go-atlassian client.
+func SearchIssues(client *jv3.Client, sp SearchProvider, opts ...SearchOpt) (*models.IssueSearchJQLScheme, error) {
+	c := &searchConfig{}
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	req := sp.ProvideSearchRequest()
+	limit := req.MaxResults
+	pageSize := 100
+	if limit == 0 {
+		req.MaxResults = pageSize
+	}
+
+	var allIssues []*models.IssueScheme
+	nextPageToken := ""
+	var last *models.IssueSearchJQLScheme
+	for {
+		batchSize := req.MaxResults
+		if limit > 0 && len(allIssues)+batchSize > limit {
+			batchSize = limit - len(allIssues)
+		}
+		result, _, err := client.Issue.Search.SearchJQL(
+			context.Background(),
+			req.JQL,
+			[]string(req.Fields),
+			nil,
+			batchSize,
+			nextPageToken,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if !c.autoPaginate {
+			return result, nil
+		}
+		last = result
+		allIssues = append(allIssues, result.Issues...)
+		if (limit > 0 && len(allIssues) >= limit) || result.NextPageToken == "" {
+			last.Issues = allIssues
+			return last, nil
+		}
+		nextPageToken = result.NextPageToken
+	}
+}
+
+func Search(ua HttpClient, endpoint string, sp SearchProvider, opts ...SearchOpt) (*SearchResults, error) {
 	c := &searchConfig{}
 	for _, opt := range opts {
 		opt(c)
@@ -102,7 +150,7 @@ func Search(ua HttpClient, endpoint string, sp SearchProvider, opts ...SearchOpt
 		req.MaxResults = 100
 	}
 
-	issues := jiradata.Issues{}
+	issues := Issues{}
 	for {
 		encoded, err := json.Marshal(req)
 		if err != nil {
@@ -119,7 +167,7 @@ func Search(ua HttpClient, endpoint string, sp SearchProvider, opts ...SearchOpt
 			return nil, responseError(resp)
 		}
 
-		page := &jiradata.SearchResults{}
+		page := &SearchResults{}
 		err = json.NewDecoder(resp.Body).Decode(page)
 		if err != nil {
 			return nil, err

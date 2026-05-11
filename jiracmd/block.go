@@ -8,13 +8,13 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type BlockOptions struct {
 	jiracli.CommonOptions     `yaml:",inline" json:",inline" figtree:",inline"`
-	jiradata.LinkIssueRequest `yaml:",inline" json:",inline" figtree:",inline"`
+	jira.LinkIssueRequest `yaml:",inline" json:",inline" figtree:",inline"`
 	Project                   string `yaml:"project,omitempty" json:"project,omitempty"`
 }
 
@@ -23,12 +23,12 @@ func CmdBlockRegistry() *jiracli.CommandRegistryEntry {
 		CommonOptions: jiracli.CommonOptions{
 			Template: figtree.NewStringOption("edit"),
 		},
-		LinkIssueRequest: jiradata.LinkIssueRequest{
-			Type: &jiradata.IssueLinkType{
+		LinkIssueRequest: jira.LinkIssueRequest{
+			Type: &models.LinkTypeScheme{
 				Name: "Blocks",
 			},
-			InwardIssue:  &jiradata.IssueRef{},
-			OutwardIssue: &jiradata.IssueRef{},
+			InwardIssue:  &jira.IssueRef{},
+			OutwardIssue: &jira.IssueRef{},
 		},
 	}
 
@@ -51,7 +51,7 @@ func CmdBlockUsage(cmd *kingpin.CmdClause, opts *BlockOptions) error {
 	jiracli.EditorUsage(cmd, &opts.CommonOptions)
 	jiracli.TemplateUsage(cmd, &opts.CommonOptions)
 	cmd.Flag("comment", "Comment message when marking issue as blocker").Short('m').PreAction(func(ctx *kingpin.ParseContext) error {
-		opts.Comment = &jiradata.Comment{
+		opts.Comment = &models.IssueCommentSchemeV2{
 			Body: jiracli.FlagValue(ctx, "comment"),
 		}
 		return nil
@@ -69,8 +69,8 @@ func CmdBlock(o *oreo.Client, globals *jiracli.GlobalOptions, opts *BlockOptions
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.InwardIssue.Key, jira.URLJoin(globals.Endpoint.Value, "browse", opts.InwardIssue.Key))
-		fmt.Printf("OK %s %s\n", opts.OutwardIssue.Key, jira.URLJoin(globals.Endpoint.Value, "browse", opts.OutwardIssue.Key))
+		fmt.Printf("OK %s %s\n", opts.InwardIssue.Key, globals.BrowseURL(opts.InwardIssue.Key))
+		fmt.Printf("OK %s %s\n", opts.OutwardIssue.Key, globals.BrowseURL(opts.OutwardIssue.Key))
 	}
 
 	if opts.Browse.Value {

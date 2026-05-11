@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -43,10 +42,10 @@ func CmdLabelsSetUsage(cmd *kingpin.CmdClause, opts *LabelsSetOptions) error {
 
 // CmdLabelsSet will set labels on a given issue
 func CmdLabelsSet(o *oreo.Client, globals *jiracli.GlobalOptions, opts *LabelsSetOptions) error {
-	issueUpdate := jiradata.IssueUpdate{
-		Update: jiradata.FieldOperationsMap{
-			"labels": jiradata.FieldOperations{
-				jiradata.FieldOperation{
+	issueUpdate := jira.IssueUpdate{
+		Update: jira.FieldOperationsMap{
+			"labels": jira.FieldOperations{
+				jira.FieldOperation{
 					"set": opts.Labels,
 				},
 			},
@@ -57,7 +56,7 @@ func CmdLabelsSet(o *oreo.Client, globals *jiracli.GlobalOptions, opts *LabelsSe
 		return err
 	}
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+		fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 	}
 	if opts.Browse.Value {
 		return CmdBrowse(globals, opts.Issue)

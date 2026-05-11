@@ -44,11 +44,10 @@ func CmdAttachGet(o *oreo.Client, globals *jiracli.GlobalOptions, opts *AttachGe
 		return err
 	}
 
-	resp, err := o.Get(attachment.Content)
+	content, err := jira.DownloadAttachment(o, globals.Endpoint.Value, opts.AttachmentID)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
 
 	var output *os.File
 	if opts.OutputFile == "-" {
@@ -67,7 +66,7 @@ func CmdAttachGet(o *oreo.Client, globals *jiracli.GlobalOptions, opts *AttachGe
 		defer output.Close()
 	}
 
-	_, err = io.Copy(output, resp.Body)
+	_, err = io.Copy(output, content)
 	if err != nil {
 		return err
 	}

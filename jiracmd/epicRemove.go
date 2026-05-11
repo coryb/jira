@@ -8,13 +8,12 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type EpicRemoveOptions struct {
-	jiradata.EpicIssues `yaml:",inline" json:",inline" figtree:",inline"`
-	Project             string `yaml:"project,omitempty" json:"project,omitempty"`
+	Issues  []string `yaml:"issues,omitempty"  json:"issues,omitempty"`
+	Project string   `yaml:"project,omitempty" json:"project,omitempty"`
 }
 
 func CmdEpicRemoveRegistry() *jiracli.CommandRegistryEntry {
@@ -41,13 +40,13 @@ func CmdEpicRemoveUsage(cmd *kingpin.CmdClause, opts *EpicRemoveOptions) error {
 }
 
 func CmdEpicRemove(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EpicRemoveOptions) error {
-	if err := jira.EpicRemoveIssues(o, globals.Endpoint.Value, &opts.EpicIssues); err != nil {
+	if err := jira.EpicRemoveIssues(o, globals.Endpoint.Value, opts.Issues); err != nil {
 		return err
 	}
 
 	if !globals.Quiet.Value {
 		for _, issue := range opts.Issues {
-			fmt.Printf("OK %s %s\n", issue, jira.URLJoin(globals.Endpoint.Value, "browse", issue))
+			fmt.Printf("OK %s %s\n", issue, globals.BrowseURL(issue))
 		}
 	}
 

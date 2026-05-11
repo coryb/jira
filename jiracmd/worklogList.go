@@ -3,9 +3,9 @@ package jiracmd
 import (
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -49,7 +49,7 @@ func CmdWorklogList(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Worklo
 		return err
 	}
 	if err := opts.PrintTemplate(struct {
-		Worklogs *jiradata.Worklogs `json:"worklogs,omitempty" yaml:"worklogs,omitempty"`
+		Worklogs *[]*models.IssueWorklogRichTextScheme `json:"worklogs,omitempty" yaml:"worklogs,omitempty"`
 	}{data}); err != nil {
 		return err
 	}

@@ -1,37 +1,21 @@
 package jira
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
-type ComponentProvider interface {
-	ProvideComponent() *jiradata.Component
-}
-
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/component-createComponent
-func (j *Jira) CreateComponent(cp ComponentProvider) (*jiradata.Component, error) {
-	return CreateComponent(j.UA, j.Endpoint, cp)
+func (j *Jira) CreateComponent(payload *models.ComponentPayloadScheme) (*models.ComponentScheme, error) {
+	return CreateComponent(j.UA, j.Endpoint, payload)
 }
 
-func CreateComponent(ua HttpClient, endpoint string, cp ComponentProvider) (*jiradata.Component, error) {
-	req := cp.ProvideComponent()
-	encoded, err := json.Marshal(req)
+func CreateComponent(ua HttpClient, endpoint string, payload *models.ComponentPayloadScheme) (*models.ComponentScheme, error) {
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	uri := URLJoin(endpoint, "rest/api/2/component")
-	resp, err := ua.Post(uri, "application/json", bytes.NewBuffer(encoded))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 201 {
-		results := &jiradata.Component{}
-		return results, json.NewDecoder(resp.Body).Decode(results)
-	}
-	return nil, responseError(resp)
+	result, _, err := client.Project.Component.Create(context.Background(), payload)
+	return result, err
 }

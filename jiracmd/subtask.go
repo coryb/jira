@@ -2,20 +2,19 @@ package jiracmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type SubtaskOptions struct {
 	jiracli.CommonOptions `yaml:",inline" json:",inline" figtree:",inline"`
-	jiradata.IssueUpdate  `yaml:",inline" json:",inline" figtree:",inline"`
+	jira.IssueUpdate  `yaml:",inline" json:",inline" figtree:",inline"`
 	Project               string            `yaml:"project,omitempty" json:"project,omitempty"`
 	IssueType             string            `yaml:"issuetype,omitempty" json:"issuetype,omitempty"`
 	Overrides             map[string]string `yaml:"overrides,omitempty" json:"overrides,omitempty"`
@@ -64,18 +63,14 @@ func CmdSubtaskUsage(cmd *kingpin.CmdClause, opts *SubtaskOptions) error {
 // CmdSubtask sends the subtask-metadata to the "subtask" template for editing, then
 // will parse the edited document as YAML and submit the document to jira.
 func CmdSubtask(o *oreo.Client, globals *jiracli.GlobalOptions, opts *SubtaskOptions) error {
-	if globals.JiraDeploymentType.Value == "" {
-		serverInfo, err := jira.ServerInfo(o, globals.Endpoint.Value)
-		if err != nil {
-			return err
-		}
-		globals.JiraDeploymentType.Value = strings.ToLower(serverInfo.DeploymentType)
+	if err := ensureServerInfo(o, globals); err != nil {
+		return err
 	}
 
 	type templateInput struct {
-		Meta      *jiradata.IssueType `yaml:"meta" json:"meta"`
+		Meta      *jira.IssueType `yaml:"meta" json:"meta"`
 		Overrides map[string]string   `yaml:"overrides" json:"overrides"`
-		Parent    *jiradata.Issue     `yaml:"parent" json:"parent"`
+		Parent    *jira.Issue     `yaml:"parent" json:"parent"`
 	}
 
 	parent, err := jira.GetIssue(o, globals.Endpoint.Value, opts.Issue, nil)
@@ -98,7 +93,7 @@ func CmdSubtask(o *oreo.Client, globals *jiracli.GlobalOptions, opts *SubtaskOpt
 		return err
 	}
 
-	issueUpdate := jiradata.IssueUpdate{}
+	issueUpdate := jira.IssueUpdate{}
 	input := templateInput{
 		Meta:      createMeta,
 		Overrides: opts.Overrides,
@@ -107,8 +102,11 @@ func CmdSubtask(o *oreo.Client, globals *jiracli.GlobalOptions, opts *SubtaskOpt
 	input.Overrides["project"] = opts.Project
 	input.Overrides["issuetype"] = opts.IssueType
 	input.Overrides["login"] = globals.Login.Value
+	if me, err := jira.GetCurrentUser(o, globals.Endpoint.Value); err == nil && me.DisplayName != "" {
+		input.Overrides["displayName"] = me.DisplayName
+	}
 
-	var issueResp *jiradata.IssueCreateResponse
+	var issueResp *models.IssueResponseScheme
 	err = jiracli.EditLoop(&opts.CommonOptions, &input, &issueUpdate, func() error {
 		if globals.JiraDeploymentType.Value == jiracli.CloudDeploymentType {
 			err := fixGDPRUserFields(o, globals.Endpoint.Value, createMeta.Fields, issueUpdate.Fields)
@@ -124,7 +122,7 @@ func CmdSubtask(o *oreo.Client, globals *jiracli.GlobalOptions, opts *SubtaskOpt
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", issueResp.Key, jira.URLJoin(globals.Endpoint.Value, "browse", issueResp.Key))
+		fmt.Printf("OK %s %s\n", issueResp.Key, globals.BrowseURL(issueResp.Key))
 	}
 
 	if opts.Browse.Value {

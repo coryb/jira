@@ -1,22 +1,16 @@
 package jira
 
 import (
-	"encoding/json"
+	"context"
 
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
-func ServerInfo(ua HttpClient, endpoint string) (*jiradata.ServerInfo, error) {
-	uri := URLJoin(endpoint, "rest/api/2/serverInfo")
-	resp, err := ua.GetJSON(uri)
+func GetServerInfo(ua HttpClient, endpoint string) (*models.ServerInformationScheme, error) {
+	client, err := newAtlassianClient(ua, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		results := jiradata.ServerInfo{}
-		return &results, json.NewDecoder(resp.Body).Decode(&results)
-	}
-	return nil, responseError(resp)
+	result, _, err := client.Server.Info(context.Background())
+	return result, err
 }

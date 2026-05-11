@@ -5,6 +5,7 @@ import (
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
+	jv3 "github.com/ctreminiom/go-atlassian/v2/jira/v3"
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -69,7 +70,11 @@ func CmdListUsage(cmd *kingpin.CmdClause, opts *ListOptions, fig *figtree.FigTre
 
 // List will query jira and send data to "list" template
 func CmdList(o *oreo.Client, globals *jiracli.GlobalOptions, opts *ListOptions) error {
-	data, err := jira.Search(o, globals.Endpoint.Value, opts, jira.WithAutoPagination())
+	client, err := jv3.New(o, globals.Endpoint.Value)
+	if err != nil {
+		return err
+	}
+	data, err := jira.SearchIssues(client, opts, jira.WithAutoPagination())
 	if err != nil {
 		return err
 	}

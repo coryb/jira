@@ -3,7 +3,6 @@ package jiracmd
 import (
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
-	jira "github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
 	"github.com/pkg/browser"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -25,6 +24,9 @@ func CmdBrowseRegistry() *jiracli.CommandRegistryEntry {
 			return nil
 		},
 		func(o *oreo.Client, globals *jiracli.GlobalOptions) error {
+			if err := ensureServerInfo(o, globals); err != nil {
+				return err
+			}
 			opts.Issue = jiracli.FormatIssue(opts.Issue, opts.Project)
 			return CmdBrowse(globals, opts.Issue)
 		},
@@ -33,5 +35,5 @@ func CmdBrowseRegistry() *jiracli.CommandRegistryEntry {
 
 // CmdBrowse open the default system browser to the provided issue
 func CmdBrowse(globals *jiracli.GlobalOptions, issue string) error {
-	return browser.OpenURL(jira.URLJoin(globals.Endpoint.Value, "browse", issue))
+	return browser.OpenURL(globals.BrowseURL(issue))
 }

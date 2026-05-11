@@ -59,7 +59,7 @@ func CmdLogin(o *oreo.Client, globals *jiracli.GlobalOptions, opts *jiracli.Comm
 
 	if session, err := jira.GetSession(o, globals.Endpoint.Value); err != nil {
 		// No active session so try to create a new one
-		_, err := jira.NewSession(ua, globals.Endpoint.Value, globals)
+		_, err := jira.NewSession(ua, globals.Endpoint.Value, &jira.AuthOptions{Username: globals.Login.Value, Password: globals.GetPass()})
 		if err != nil {
 			// reset password on failed session
 			globals.SetPass("")

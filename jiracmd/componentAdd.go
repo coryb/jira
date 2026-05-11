@@ -5,16 +5,28 @@ import (
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type ComponentAddOptions struct {
 	jiracli.CommonOptions `yaml:",inline" json:",inline" figtree:",inline"`
-	jiradata.Component    `yaml:",inline" json:",inline" figtree:",inline"`
+	Project               string `yaml:"project,omitempty"      json:"project,omitempty"`
+	Name                  string `yaml:"name,omitempty"         json:"name,omitempty"`
+	Description           string `yaml:"description,omitempty"  json:"description,omitempty"`
+	LeadUserName          string `yaml:"leadUserName,omitempty" json:"leadUserName,omitempty"`
+}
+
+func (o *ComponentAddOptions) toPayload() *models.ComponentPayloadScheme {
+	return &models.ComponentPayloadScheme{
+		Project:       o.Project,
+		Name:          o.Name,
+		Description:   o.Description,
+		LeadAccountID: o.LeadUserName,
+	}
 }
 
 func CmdComponentAddRegistry() *jiracli.CommandRegistryEntry {
@@ -50,10 +62,9 @@ func CmdComponentAddUsage(cmd *kingpin.CmdClause, opts *ComponentAddOptions) err
 // CmdComponentAdd sends the provided overrides to the "component-add" template for editing, then
 // will parse the edited document as YAML and submit the document to jira.
 func CmdComponentAdd(o *oreo.Client, globals *jiracli.GlobalOptions, opts *ComponentAddOptions) error {
-	var err error
-	component := &jiradata.Component{}
-	err = jiracli.EditLoop(&opts.CommonOptions, &opts.Component, component, func() error {
-		_, err = jira.CreateComponent(o, globals.Endpoint.Value, component)
+	result := &ComponentAddOptions{}
+	err := jiracli.EditLoop(&opts.CommonOptions, opts, result, func() error {
+		_, err := jira.CreateComponent(o, globals.Endpoint.Value, result.toPayload())
 		return err
 	})
 	if err != nil {
@@ -61,7 +72,7 @@ func CmdComponentAdd(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Compo
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", component.Project, component.Name)
+		fmt.Printf("OK %s %s\n", result.Project, result.Name)
 	}
 	return nil
 }

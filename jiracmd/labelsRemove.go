@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -43,14 +42,14 @@ func CmdLabelsRemoveUsage(cmd *kingpin.CmdClause, opts *LabelsRemoveOptions) err
 
 // CmdLabelsRemove will remove labels on a given issue
 func CmdLabelsRemove(o *oreo.Client, globals *jiracli.GlobalOptions, opts *LabelsRemoveOptions) error {
-	ops := jiradata.FieldOperations{}
+	ops := jira.FieldOperations{}
 	for _, label := range opts.Labels {
-		ops = append(ops, jiradata.FieldOperation{
+		ops = append(ops, jira.FieldOperation{
 			"remove": label,
 		})
 	}
-	issueUpdate := jiradata.IssueUpdate{
-		Update: jiradata.FieldOperationsMap{
+	issueUpdate := jira.IssueUpdate{
+		Update: jira.FieldOperationsMap{
 			"labels": ops,
 		},
 	}
@@ -60,7 +59,7 @@ func CmdLabelsRemove(o *oreo.Client, globals *jiracli.GlobalOptions, opts *Label
 		return err
 	}
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+		fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 	}
 	if opts.Browse.Value {
 		return CmdBrowse(globals, opts.Issue)

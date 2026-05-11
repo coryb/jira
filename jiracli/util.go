@@ -83,7 +83,10 @@ func copyFile(src, dst string) (err error) {
 func fuzzyAge(start string) (string, error) {
 	t, err := time.Parse("2006-01-02T15:04:05.000-0700", start)
 	if err != nil {
-		return "", err
+		t, err = time.Parse("2006-01-02T15:04:05-0700", start)
+		if err != nil {
+			return "", err
+		}
 	}
 	delta := time.Since(t)
 	if delta.Minutes() < 2 {

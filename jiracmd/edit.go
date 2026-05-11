@@ -2,20 +2,19 @@ package jiracmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/coryb/figtree"
 	"github.com/coryb/oreo"
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 	"gopkg.in/AlecAivazis/survey.v1"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type EditOptions struct {
 	jiracli.CommonOptions `yaml:",inline" json:",inline" figtree:",inline"`
-	jiradata.IssueUpdate  `yaml:",inline" json:",inline" figtree:",inline"`
+	jira.IssueUpdate  `yaml:",inline" json:",inline" figtree:",inline"`
 	jira.SearchOptions    `yaml:",inline" json:",inline" figtree:",inline"`
 	Overrides             map[string]string `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 	Issue                 string            `yaml:"issue,omitempty" json:"issue,omitempty"`
@@ -72,17 +71,13 @@ func CmdEditUsage(cmd *kingpin.CmdClause, opts *EditOptions, fig *figtree.FigTre
 
 // Edit will get issue data and send to "edit" template
 func CmdEdit(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EditOptions) error {
-	if globals.JiraDeploymentType.Value == "" {
-		serverInfo, err := jira.ServerInfo(o, globals.Endpoint.Value)
-		if err != nil {
-			return err
-		}
-		globals.JiraDeploymentType.Value = strings.ToLower(serverInfo.DeploymentType)
+	if err := ensureServerInfo(o, globals); err != nil {
+		return err
 	}
 
 	type templateInput struct {
-		*jiradata.Issue `yaml:",inline"`
-		Meta            *jiradata.EditMeta `yaml:"meta" json:"meta"`
+		*jira.Issue `yaml:",inline"`
+		Meta            *jira.EditMeta `yaml:"meta" json:"meta"`
 		Overrides       map[string]string  `yaml:"overrides" json:"overrides"`
 	}
 	if opts.Issue != "" {
@@ -95,7 +90,7 @@ func CmdEdit(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EditOptions) 
 			return err
 		}
 
-		issueUpdate := jiradata.IssueUpdate{}
+		issueUpdate := jira.IssueUpdate{}
 		input := templateInput{
 			Issue:     issueData,
 			Meta:      editMeta,
@@ -114,7 +109,7 @@ func CmdEdit(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EditOptions) 
 			return err
 		}
 		if !globals.Quiet.Value {
-			fmt.Printf("OK %s %s\n", opts.Issue, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Issue))
+			fmt.Printf("OK %s %s\n", opts.Issue, globals.BrowseURL(opts.Issue))
 		}
 		if opts.Browse.Value {
 			return CmdBrowse(globals, opts.Issue)
@@ -131,7 +126,7 @@ func CmdEdit(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EditOptions) 
 			return err
 		}
 
-		issueUpdate := jiradata.IssueUpdate{}
+		issueUpdate := jira.IssueUpdate{}
 		input := templateInput{
 			Issue:     issueData,
 			Meta:      editMeta,
@@ -165,7 +160,7 @@ func CmdEdit(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EditOptions) 
 			return err
 		}
 		if !globals.Quiet.Value {
-			fmt.Printf("OK %s %s\n", issueData.Key, jira.URLJoin(globals.Endpoint.Value, "browse", issueData.Key))
+			fmt.Printf("OK %s %s\n", issueData.Key, globals.BrowseURL(issueData.Key))
 		}
 		if opts.Browse.Value {
 			return CmdBrowse(globals, issueData.Key)
@@ -189,20 +184,31 @@ func fixUserField(ua jira.HttpClient, endpoint string, userField map[string]inte
 		}
 	}
 	users, err := jira.UserSearch(ua, endpoint, &jira.UserSearchOptions{
-		// Query field will search users displayName and emailAddress
-		Query: queryName,
+		Query:      queryName,
+		MaxResults: 50,
 	})
 	if err != nil {
 		return err
 	}
-	if len(users) != 1 {
-		return fmt.Errorf("Found %d accounts for users with query %q", len(users), queryName)
+	// Filter for exact displayName or emailAddress match to avoid ambiguous results
+	var exact []*models.UserScheme
+	for _, u := range users {
+		if u.DisplayName == queryName || u.EmailAddress == queryName {
+			exact = append(exact, u)
+		}
 	}
-	userField["accountId"] = users[0].AccountID
-	return nil
+	if len(exact) == 1 {
+		userField["accountId"] = exact[0].AccountID
+		return nil
+	}
+	if len(users) == 1 {
+		userField["accountId"] = users[0].AccountID
+		return nil
+	}
+	return fmt.Errorf("Found %d accounts for users with query %q (use accountId: to disambiguate)", len(users), queryName)
 }
 
-func fixGDPRUserFields(ua jira.HttpClient, endpoint string, meta jiradata.FieldMetaMap, fields map[string]interface{}) error {
+func fixGDPRUserFields(ua jira.HttpClient, endpoint string, meta jira.FieldMetaMap, fields map[string]interface{}) error {
 	for fieldName, fieldMeta := range meta {
 		// check to see if meta-field is in fields data, otherwise skip
 		if _, ok := fields[fieldName]; !ok {

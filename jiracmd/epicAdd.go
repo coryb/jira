@@ -8,14 +8,13 @@ import (
 
 	"github.com/go-jira/jira"
 	"github.com/go-jira/jira/jiracli"
-	"github.com/go-jira/jira/jiradata"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type EpicAddOptions struct {
-	jiradata.EpicIssues `yaml:",inline" json:",inline" figtree:",inline"`
-	Project             string `yaml:"project,omitempty" json:"project,omitempty"`
-	Epic                string `yaml:"epic,omitempty" json:"epic,omitempty"`
+	Issues  []string `yaml:"issues,omitempty"  json:"issues,omitempty"`
+	Project string   `yaml:"project,omitempty" json:"project,omitempty"`
+	Epic    string   `yaml:"epic,omitempty"    json:"epic,omitempty"`
 }
 
 func CmdEpicAddRegistry() *jiracli.CommandRegistryEntry {
@@ -44,14 +43,14 @@ func CmdEpicAddUsage(cmd *kingpin.CmdClause, opts *EpicAddOptions) error {
 }
 
 func CmdEpicAdd(o *oreo.Client, globals *jiracli.GlobalOptions, opts *EpicAddOptions) error {
-	if err := jira.EpicAddIssues(o, globals.Endpoint.Value, opts.Epic, &opts.EpicIssues); err != nil {
+	if err := jira.EpicAddIssues(o, globals.Endpoint.Value, opts.Epic, opts.Issues); err != nil {
 		return err
 	}
 
 	if !globals.Quiet.Value {
-		fmt.Printf("OK %s %s\n", opts.Epic, jira.URLJoin(globals.Endpoint.Value, "browse", opts.Epic))
+		fmt.Printf("OK %s %s\n", opts.Epic, globals.BrowseURL(opts.Epic))
 		for _, issue := range opts.Issues {
-			fmt.Printf("OK %s %s\n", issue, jira.URLJoin(globals.Endpoint.Value, "browse", issue))
+			fmt.Printf("OK %s %s\n", issue, globals.BrowseURL(issue))
 		}
 	}
 
