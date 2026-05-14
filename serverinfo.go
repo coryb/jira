@@ -11,6 +11,6 @@ func GetServerInfo(ua HttpClient, endpoint string) (*models.ServerInformationSch
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Server.Info(context.Background())
-	return result, err
+	result, resp, err := client.Server.Info(context.Background())
+	return result, atlassianResponseError(resp, err)
 }

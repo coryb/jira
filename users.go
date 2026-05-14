@@ -22,8 +22,8 @@ func UserSearch(ua HttpClient, endpoint string, opts *UserSearchOptions) ([]*mod
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.User.Search.Do(context.Background(), opts.AccountID, opts.Query, opts.StartAt, opts.MaxResults)
-	return result, err
+	result, resp, err := client.User.Search.Do(context.Background(), opts.AccountID, opts.Query, opts.StartAt, opts.MaxResults)
+	return result, atlassianResponseError(resp, err)
 }
 
 func GetCurrentUser(ua HttpClient, endpoint string) (*models.UserScheme, error) {
@@ -31,6 +31,6 @@ func GetCurrentUser(ua HttpClient, endpoint string) (*models.UserScheme, error) 
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.MySelf.Details(context.Background(), nil)
-	return result, err
+	result, resp, err := client.MySelf.Details(context.Background(), nil)
+	return result, atlassianResponseError(resp, err)
 }

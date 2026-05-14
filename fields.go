@@ -15,9 +15,9 @@ func GetFields(ua HttpClient, endpoint string) ([]*models.IssueFieldScheme, erro
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Issue.Field.Gets(context.Background())
+	result, resp, err := client.Issue.Field.Gets(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, atlassianResponseError(resp, err)
 	}
 	return result, nil
 }

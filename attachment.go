@@ -16,8 +16,8 @@ func GetAttachment(ua HttpClient, endpoint string, id string) (*models.IssueAtta
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Issue.Attachment.Metadata(context.Background(), id)
-	return result, err
+	result, resp, err := client.Issue.Attachment.Metadata(context.Background(), id)
+	return result, atlassianResponseError(resp, err)
 }
 
 func (j *Jira) DownloadAttachment(id string) (io.Reader, error) {
@@ -45,6 +45,6 @@ func RemoveAttachment(ua HttpClient, endpoint string, id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.Issue.Attachment.Delete(context.Background(), id)
-	return err
+	resp, err := client.Issue.Attachment.Delete(context.Background(), id)
+	return atlassianResponseError(resp, err)
 }

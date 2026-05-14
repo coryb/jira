@@ -29,8 +29,8 @@ func EpicSearch(ua HttpClient, endpoint string, epic string, sp SearchProvider) 
 		Fields: []string(req.Fields),
 	}
 
-	result, _, err := client.Epic.Issues(context.Background(), epic, opts, req.StartAt, req.MaxResults)
-	return result, err
+	result, resp, err := client.Epic.Issues(context.Background(), epic, opts, req.StartAt, req.MaxResults)
+	return result, atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira-software/REST/latest/#agile/1.0/epic-moveIssuesToEpic
@@ -43,8 +43,8 @@ func EpicAddIssues(ua HttpClient, endpoint string, epic string, issues []string)
 	if err != nil {
 		return err
 	}
-	_, err = client.Epic.Move(context.Background(), epic, issues)
-	return err
+	resp, err := client.Epic.Move(context.Background(), epic, issues)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira-software/REST/latest/#agile/1.0/epic-removeIssuesFromEpic
@@ -57,6 +57,6 @@ func EpicRemoveIssues(ua HttpClient, endpoint string, issues []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.Epic.Move(context.Background(), "none", issues)
-	return err
+	resp, err := client.Epic.Move(context.Background(), "none", issues)
+	return atlassianResponseError(resp, err)
 }

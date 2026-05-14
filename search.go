@@ -113,7 +113,7 @@ func SearchIssues(client *jv3.Client, sp SearchProvider, opts ...SearchOpt) (*mo
 		if limit > 0 && len(allIssues)+batchSize > limit {
 			batchSize = limit - len(allIssues)
 		}
-		result, _, err := client.Issue.Search.SearchJQL(
+		result, resp, err := client.Issue.Search.SearchJQL(
 			context.Background(),
 			req.JQL,
 			[]string(req.Fields),
@@ -122,7 +122,7 @@ func SearchIssues(client *jv3.Client, sp SearchProvider, opts ...SearchOpt) (*mo
 			nextPageToken,
 		)
 		if err != nil {
-			return nil, err
+			return nil, atlassianResponseError(resp, err)
 		}
 		if !c.autoPaginate {
 			return result, nil

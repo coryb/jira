@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	models "github.com/ctreminiom/go-atlassian/v2/pkg/infra/models"
 )
 
 // ErrorCollection mirrors the Jira REST API error response body.
@@ -23,6 +25,23 @@ func (e ErrorCollection) Error() string {
 		parts = append(parts, k+": "+v)
 	}
 	return strings.Join(parts, ". ")
+}
+
+func atlassianResponseError(resp *models.ResponseScheme, err error) error {
+	if err == nil {
+		return nil
+	}
+	if resp == nil || resp.Bytes.Len() == 0 {
+		return err
+	}
+	results := &ErrorCollection{}
+	if jerr := json.Unmarshal(resp.Bytes.Bytes(), results); jerr != nil {
+		return err
+	}
+	if len(results.ErrorMessages) == 0 && len(results.Errors) == 0 {
+		return err
+	}
+	return results
 }
 
 func responseError(resp *http.Response) error {

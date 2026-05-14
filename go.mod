@@ -26,6 +26,7 @@ require (
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/coryb/yaml.v2 v2.0.0-20180616071044-0e40e46f7153
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
+	stash.corp.netflix.com/ps/metatron-go v1.44.0
 )
 
 require (
@@ -36,11 +37,11 @@ require (
 	github.com/Netflix/go-expect v0.0.0-20180928190340-9d1f4485533b // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
-	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/coryb/walky v0.0.0-20221229175356-f7b4e8f780fb // indirect
 	github.com/fatih/camelcase v1.0.1-0.20181010234014-9db1b65eb38b // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.1.0 // indirect
 	github.com/guelfey/go.dbus v0.0.0-20131113121618-f6a3a2366cc3 // indirect
 	github.com/hinshun/vt10x v0.0.0-20180809195222-d55458df857c // indirect
 	github.com/huandu/xstrings v1.2.0 // indirect
@@ -50,6 +51,8 @@ require (
 	github.com/mattn/go-colorable v0.0.9 // indirect
 	github.com/mattn/go-isatty v0.0.3 // indirect
 	github.com/mattn/go-runewidth v0.0.6 // indirect
+	github.com/pavel-v-chernykh/keystore-go v2.1.0+incompatible // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/theckman/go-flock v0.4.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
@@ -57,7 +60,11 @@ require (
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/term v0.23.0 // indirect
+	golang.org/x/text v0.17.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240823204242-4ba0660f739c // indirect
+	google.golang.org/grpc v1.65.0 // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
-	gopkg.in/yaml.v2 v2.2.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.4.0 // indirect
 )

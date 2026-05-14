@@ -16,8 +16,8 @@ func GetProjectComponents(ua HttpClient, endpoint string, project string) ([]*mo
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Project.Component.Gets(context.Background(), project)
-	return result, err
+	result, resp, err := client.Project.Component.Gets(context.Background(), project)
+	return result, atlassianResponseError(resp, err)
 }
 
 // https://developer.atlassian.com/cloud/jira/platform/rest/v2#api-api-2-project-projectIdOrKey-versions-get
@@ -30,6 +30,6 @@ func GetProjectVersions(ua HttpClient, endpoint string, project string) ([]*mode
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Project.Version.Gets(context.Background(), project)
-	return result, err
+	result, resp, err := client.Project.Version.Gets(context.Background(), project)
+	return result, atlassianResponseError(resp, err)
 }

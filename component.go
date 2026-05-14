@@ -16,6 +16,6 @@ func CreateComponent(ua HttpClient, endpoint string, payload *models.ComponentPa
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Project.Component.Create(context.Background(), payload)
-	return result, err
+	result, resp, err := client.Project.Component.Create(context.Background(), payload)
+	return result, atlassianResponseError(resp, err)
 }

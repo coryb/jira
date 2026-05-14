@@ -309,7 +309,10 @@ func register(app *kingpin.Application, o *oreo.Client, fig *figtree.FigTree) {
 				}
 			}
 			globalOptionsProviderMu.Unlock()
-			return copy.Entry.ExecuteFunc(o, &globals)
+			if err := copy.Entry.ExecuteFunc(o, &globals); err != nil {
+				return CliError(err)
+			}
+			return nil
 		})
 	}
 }

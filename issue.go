@@ -89,9 +89,9 @@ func GetIssueWorklog(ua HttpClient, endpoint string, issue string) (*[]*models.I
 	if err != nil {
 		return nil, err
 	}
-	page, _, err := client.Issue.Worklog.Issue(context.Background(), issue, 0, 0, 0, nil)
+	page, resp, err := client.Issue.Worklog.Issue(context.Background(), issue, 0, 0, 0, nil)
 	if err != nil {
-		return nil, err
+		return nil, atlassianResponseError(resp, err)
 	}
 	return &page.Worklogs, nil
 }
@@ -111,9 +111,9 @@ func GetIssueComment(ua HttpClient, endpoint string, issue string) ([]*models.Is
 	maxResults := 100
 	var comments []*models.IssueCommentSchemeV2
 	for startAt < total {
-		page, _, err := client.Issue.Comment.Gets(context.Background(), issue, "", nil, startAt, maxResults)
+		page, resp, err := client.Issue.Comment.Gets(context.Background(), issue, "", nil, startAt, maxResults)
 		if err != nil {
-			return nil, err
+			return nil, atlassianResponseError(resp, err)
 		}
 		total = page.Total
 		comments = append(comments, page.Comments...)
@@ -141,8 +141,11 @@ func AddIssueWorklog(ua HttpClient, endpoint string, issue string, req *models.I
 	if req.Comment != "" {
 		payload.Comment = &models.CommentPayloadSchemeV2{Body: req.Comment}
 	}
-	result, _, err := client.Issue.Worklog.Add(context.Background(), issue, payload, nil)
-	return result, err
+	result, resp, err := client.Issue.Worklog.Add(context.Background(), issue, payload, nil)
+	if err != nil {
+		return nil, atlassianResponseError(resp, err)
+	}
+	return result, nil
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getEditIssueMeta
@@ -182,8 +185,8 @@ func EditIssue(ua HttpClient, endpoint string, issue string, req *IssueUpdate) e
 		return err
 	}
 	cf := &models.CustomFields{Fields: []map[string]interface{}{bodyMap}}
-	_, err = client.Issue.Update(context.Background(), issue, true, &models.IssueSchemeV2{}, cf, nil)
-	return err
+	resp, err := client.Issue.Update(context.Background(), issue, true, &models.IssueSchemeV2{}, cf, nil)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-createIssue
@@ -205,8 +208,11 @@ func CreateIssue(ua HttpClient, endpoint string, req *IssueUpdate) (*models.Issu
 		return nil, err
 	}
 	cf := &models.CustomFields{Fields: []map[string]interface{}{bodyMap}}
-	result, _, err := client.Issue.Create(context.Background(), &models.IssueSchemeV2{}, cf)
-	return result, err
+	result, resp, err := client.Issue.Create(context.Background(), &models.IssueSchemeV2{}, cf)
+	if err != nil {
+		return nil, atlassianResponseError(resp, err)
+	}
+	return result, nil
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getCreateIssueMeta
@@ -295,8 +301,8 @@ func LinkIssues(ua HttpClient, endpoint string, req *LinkIssueRequest) error {
 	if req.Comment != nil {
 		payload.Comment = &models.CommentPayloadSchemeV2{Body: req.Comment.Body, Visibility: req.Comment.Visibility}
 	}
-	_, err = client.Issue.Link.Create(context.Background(), payload)
-	return err
+	resp, err := client.Issue.Link.Create(context.Background(), payload)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-getTransitions
@@ -348,8 +354,8 @@ func TransitionIssue(ua HttpClient, endpoint string, issue string, req *IssueUpd
 			CustomFields: &models.CustomFields{Fields: []map[string]interface{}{bodyMap}},
 		}
 	}
-	_, err = client.Issue.Move(context.Background(), issue, transitionID, options)
-	return err
+	resp, err := client.Issue.Move(context.Background(), issue, transitionID, options)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issueLinkType-getIssueLinkTypes
@@ -362,9 +368,9 @@ func GetIssueLinkTypes(ua HttpClient, endpoint string) ([]*models.LinkTypeScheme
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Issue.Link.Type.Gets(context.Background())
+	result, resp, err := client.Issue.Link.Type.Gets(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, atlassianResponseError(resp, err)
 	}
 	return result.IssueLinkTypes, nil
 }
@@ -379,8 +385,8 @@ func IssueAddVote(ua HttpClient, endpoint string, issue string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.Issue.Vote.Add(context.Background(), issue)
-	return err
+	resp, err := client.Issue.Vote.Add(context.Background(), issue)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-removeVote
@@ -393,8 +399,8 @@ func IssueRemoveVote(ua HttpClient, endpoint string, issue string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.Issue.Vote.Delete(context.Background(), issue)
-	return err
+	resp, err := client.Issue.Vote.Delete(context.Background(), issue)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira-software/REST/cloud/#agile/1.0/issue-rankIssues
@@ -430,8 +436,8 @@ func IssueAddWatcher(ua HttpClient, endpoint string, issue, user string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.Issue.Watcher.Add(context.Background(), issue, user)
-	return err
+	resp, err := client.Issue.Watcher.Add(context.Background(), issue, user)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-addWatcher
@@ -444,8 +450,8 @@ func IssueRemoveWatcher(ua HttpClient, endpoint string, issue, user string) erro
 	if err != nil {
 		return err
 	}
-	_, err = client.Issue.Watcher.Delete(context.Background(), issue, user)
-	return err
+	resp, err := client.Issue.Watcher.Delete(context.Background(), issue, user)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue/{issueIdOrKey}/comment-addComment
@@ -459,8 +465,11 @@ func IssueAddComment(ua HttpClient, endpoint string, issue string, req *models.I
 		return nil, err
 	}
 	payload := &models.CommentPayloadSchemeV2{Body: req.Body, Visibility: req.Visibility}
-	result, _, err := client.Issue.Comment.Add(context.Background(), issue, payload, nil)
-	return result, err
+	result, resp, err := client.Issue.Comment.Add(context.Background(), issue, payload, nil)
+	if err != nil {
+		return nil, atlassianResponseError(resp, err)
+	}
+	return result, nil
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue-assign
@@ -507,8 +516,8 @@ func IssueAssignAccountID(ua HttpClient, endpoint string, issue, acctId string) 
 	if err != nil {
 		return err
 	}
-	_, err = client.Issue.Assign(context.Background(), issue, acctId)
-	return err
+	resp, err := client.Issue.Assign(context.Background(), issue, acctId)
+	return atlassianResponseError(resp, err)
 }
 
 // https://docs.atlassian.com/jira/REST/cloud/#api/2/issue/{issueIdOrKey}/attachments-addAttachment
@@ -521,9 +530,9 @@ func IssueAttachFile(ua HttpClient, endpoint string, issue, filename string, con
 	if err != nil {
 		return nil, err
 	}
-	result, _, err := client.Issue.Attachment.Add(context.Background(), issue, filename, contents)
+	result, resp, err := client.Issue.Attachment.Add(context.Background(), issue, filename, contents)
 	if err != nil {
-		return nil, err
+		return nil, atlassianResponseError(resp, err)
 	}
 	out := ListOfAttachment(result)
 	return &out, nil
