@@ -182,7 +182,7 @@ func EditIssue(ua HttpClient, endpoint string, issue string, req *IssueUpdate) e
 		return err
 	}
 	cf := &models.CustomFields{Fields: []map[string]interface{}{bodyMap}}
-	_, err = client.Issue.Update(context.Background(), issue, false, &models.IssueSchemeV2{}, cf, nil)
+	_, err = client.Issue.Update(context.Background(), issue, true, &models.IssueSchemeV2{}, cf, nil)
 	return err
 }
 
