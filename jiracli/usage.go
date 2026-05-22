@@ -234,8 +234,19 @@ func CommandLine(fig *figtree.FigTree, o *oreo.Client) *kingpin.Application {
 				return command.Run()
 			}
 		}
+		// Dedup data.CustomCommands based on the Name
+		seenCommands := map[string]struct{}{}
+		var uniqueCommands kingpeon.DynamicCommands
+		for _, cmd := range data.CustomCommands {
+			if _, ok := seenCommands[cmd.Name]; ok {
+				continue
+			}
+			seenCommands[cmd.Name] = struct{}{}
+			uniqueCommands = append(uniqueCommands, cmd)
+		}
+		data.CustomCommands = uniqueCommands
 
-		tmp := map[string]interface{}{}
+		tmp := map[string]any{}
 		fig.LoadAllConfigs("config.yml", &tmp)
 		kingpeon.RegisterDynamicCommandsWithRunner(runner, app, data.CustomCommands, TemplateProcessor())
 	}
