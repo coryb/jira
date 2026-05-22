@@ -1,13 +1,11 @@
 module github.com/go-jira/jira
 
-go 1.23
-
-toolchain go1.24.4
+go 1.24.4
 
 require (
 	github.com/Masterminds/sprig v2.21.0+incompatible
 	github.com/coryb/figtree v1.0.2-0.20250620060029-7a28eb5f2a06
-	github.com/coryb/kingpeon v0.0.0-20180107011214-9a669f143f2e
+	github.com/coryb/kingpeon v0.0.0-20260522215921-b7192b56ac31
 	github.com/coryb/oreo v0.0.0-20180804211640-3e1b88fc08f1
 	github.com/ctreminiom/go-atlassian/v2 v2.12.0
 	github.com/google/go-cmp v0.6.0
@@ -36,7 +34,7 @@ require (
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Netflix/go-expect v0.0.0-20180928190340-9d1f4485533b // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
-	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
+	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
 	github.com/coryb/walky v0.0.0-20221229175356-f7b4e8f780fb // indirect
 	github.com/fatih/camelcase v1.0.1-0.20181010234014-9db1b65eb38b // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
